@@ -1,0 +1,72 @@
+# What’s next — `chatiq-locations`
+
+Last updated: 2026-11-04
+
+**Start here for this repo.** Mission: [`dev_docs/_mission-locations-sibling-v1.md`](./dev_docs/_mission-locations-sibling-v1.md).  
+Principles: [`dev_docs/organic-mapping.md`](./dev_docs/organic-mapping.md) · Salvage: [`dev_docs/locations-salvage.md`](./dev_docs/locations-salvage.md) · Commands: [`dev_docs/locations-command-library.md`](./dev_docs/locations-command-library.md).
+
+Workspace index (not in git): [`../ROADMAP.md`](../ROADMAP.md). Design history also lives under [`../chatiq/dev_docs/item-location-knowledge/`](../chatiq/dev_docs/item-location-knowledge/) until cutover.
+
+Local: `npm run dev` → **port 3004**. Env: [`.env.example`](./.env.example) (`LOCATIONS_SERVICE_TOKEN`).
+
+## North star
+
+Operators map a store **organically** (place → zones/items anytime, multi-agent). Shoppers get honest place-scoped “where is X?” from **published** knowledge. Vision accelerates mapping; it is not required for a first useful publish. ChatIQ stays a thin adapter + `locations_mode` gate.
+
+## Phased plan
+
+### Phase 0 — Skeleton
+
+| Work | Status |
+|------|--------|
+| Create `chatiq-locations` git + app skeleton | ✅ 2026-11-04 |
+| `GET /api/health` + `LOCATIONS_SERVICE_TOKEN` contract | ✅ |
+| Vercel project + production deploy | Not started |
+| ChatIQ adapter stub + fail closed; no calls when `locations_mode=off` | Not started |
+
+### Phase 1 — Organic data + commands (manual path)
+
+| Work | Status |
+|------|--------|
+| Re-home / migrate places · layouts · zones · publications SoT | Not started |
+| Staff: `place.*` / `zone.*` / `zone.publish` | Spec’d |
+| Guest: `places.list` / `place.get_context` / `map.resolve_item` | Spec’d |
+| Smoke: create place → zone → one item → publish → resolve | Not started |
+| Operator UI: minimal place/zone/item + publish | Not started |
+
+**Pilot DoD (manual):** Allowlisted bot answers “where is oat milk?” from a manually published zone — **no vision**.
+
+### Phase 2 — Extraction salvage
+
+| Work | Status |
+|------|--------|
+| Staged multi-image jobs + telemetry (`extract.job_*`) | Not started |
+| 1 / 3 / 8 image ladder green | Not started |
+| Review pending JSON → publish | Not started |
+| Retain per-image payloads + `failure_reason` | Not started |
+
+### Phase 3 — Concierge thin path
+
+| Work | Status |
+|------|--------|
+| `locations_mode=full` + allowlist → sibling commands | Not started |
+| Demote/delete in-process `locations-flow` / extract in ChatIQ | Not started |
+| Pilot smoke end-to-end in chat | Not started |
+
+### Phase 4 — Strangler closeout
+
+| Work | Status |
+|------|--------|
+| Stop ChatIQ writing location truth | Not started |
+| Archive legacy Locations routes that bypass sibling | Not started |
+| Point all roadmaps / `_active-focus` at sibling only | Not started |
+
+## Explicitly later
+
+Geo place pick · recipe shopping · field-level review UI · mobile capture · ERP inventory.
+
+## Progress snapshot
+
+```text
+chatiq-locations: sibling v1: [####________________] ~18% -> Phase 0 scaffold; health live locally
+```

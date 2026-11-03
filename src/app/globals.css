@@ -1,0 +1,22 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+    Arial, sans-serif;
+  color: #111;
+  background: #fafafa;
+}
+
+a {
+  color: #0b5fff;
+}
+
+code {
+  font-size: 0.9em;
+  background: #eee;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
