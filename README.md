@@ -18,8 +18,12 @@ npm run dev   # http://localhost:3004
 
 ## Auth
 
-`LOCATIONS_SERVICE_TOKEN` — Bearer on `/api/v1/*` (commands not wired yet). Health is open.
+`LOCATIONS_SERVICE_TOKEN` — Bearer on `/api/v1/*`. Health is open.
+
+## Supabase
+
+Dedicated project required for Phase 1. Setup: [`dev_docs/supabase-setup.md`](./dev_docs/supabase-setup.md). Migration: `supabase/migrations/20261105000000_locations_core_v0.sql`.
 
 ## Pattern
 
-Same strangler as [`../chatiq-booking`](../chatiq-booking): own git, Vercel, optional dedicated Supabase.
+Same strangler as [`../chatiq-booking`](../chatiq-booking): own git, Vercel, dedicated Supabase.

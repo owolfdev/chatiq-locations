@@ -21,16 +21,19 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 |------|--------|
 | Create `chatiq-locations` git + app skeleton | ✅ 2026-11-04 |
 | `GET /api/health` + `LOCATIONS_SERVICE_TOKEN` contract | ✅ |
+| Commands execute stub (`NOT_IMPLEMENTED`) + auth | ✅ 2026-11-05 |
+| ChatIQ adapter stub + fail closed; no calls when gated off | ✅ 2026-11-05 (in `chatiq`) |
+| Core SQL migration draft + supabase client/probe | ✅ 2026-11-05 |
+| Create dedicated Supabase project + apply migration | **You** — see [`dev_docs/supabase-setup.md`](./dev_docs/supabase-setup.md) |
 | Vercel project + production deploy | Not started |
-| ChatIQ adapter stub + fail closed; no calls when `locations_mode=off` | Not started |
 
 ### Phase 1 — Organic data + commands (manual path)
 
 | Work | Status |
 |------|--------|
-| Re-home / migrate places · layouts · zones · publications SoT | Not started |
-| Staff: `place.*` / `zone.*` / `zone.publish` | Spec’d |
-| Guest: `places.list` / `place.get_context` / `map.resolve_item` | Spec’d |
+| Re-home / migrate places · layouts · zones · publications SoT | Schema v0 drafted; apply on new project |
+| Staff: `place.*` / `zone.*` / `zone.publish` | Spec’d — implement next |
+| Guest: `places.list` / `place.get_context` / `map.resolve_item` | Spec’d — implement next |
 | Smoke: create place → zone → one item → publish → resolve | Not started |
 | Operator UI: minimal place/zone/item + publish | Not started |
 
@@ -68,5 +71,5 @@ Geo place pick · recipe shopping · field-level review UI · mobile capture · 
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [####________________] ~18% -> Phase 0 scaffold; health live locally
+chatiq-locations: sibling v1: [######______________] ~28% -> Adapter + schema draft; create Supabase project next
 ```

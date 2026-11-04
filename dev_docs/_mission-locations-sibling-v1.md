@@ -20,9 +20,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-04):** Create Vercel project for this repo; wire ChatIQ adapter stub + allowlist env (fail closed; zero calls when `locations_mode=off`). Then Phase 1 organic commands.
+**Next action (2026-11-05):** Create dedicated Supabase project + apply `supabase/migrations/20261105000000_locations_core_v0.sql` ([`supabase-setup.md`](./supabase-setup.md)). Then implement Phase 1 commands (`place.*` / `zone.*` / `map.resolve_item`). Vercel when ready to deploy.
 
-Treat `locations_mode=full` as pilot-only / broken-glass until adapter + smoke.
+Treat `locations_mode=full` as pilot-only / broken-glass until commands + smoke.
 
 ## Decisions (locked 2026-11-04)
 
@@ -52,8 +52,10 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - [x] Repo `chatiq-locations` created; `/api/health` (local)
 - [x] Service-token auth helper; env contract in `.env.example`
 - [x] Root `ROADMAP.md` + spec pack under `dev_docs/`
+- [x] ChatIQ adapter stub (`chatiq/src/lib/locations-sibling`) — fail closed; zero calls when gated off
+- [x] Commands execute stub + core SQL migration draft + Supabase client
+- [ ] Dedicated Supabase project created + migration applied
 - [ ] Vercel project + production deploy
-- [ ] ChatIQ adapter stub: fail closed when misconfigured; zero calls when `locations_mode=off`
 
 ### Phase 1 — Organic data + commands (deterministic, **manual first**)
 
@@ -90,6 +92,21 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-05 — Adapter stub + Supabase skeleton
+
+**What changed:** ChatIQ `locations-sibling` adapter/env/tests; sibling `POST /api/v1/commands/execute` stub; Supabase admin client + health probe; core migration `places` / layouts / `zones` / `zone_items` / `zone_publications`; [`supabase-setup.md`](./supabase-setup.md).
+
+**Verified:** locations adapter unit tests; sibling typecheck after install.
+
+**Approx. toward DoD:**
+
+```text
+chatiq-locations: sibling v1: [######______________] ~28% -> Create Supabase project + apply migration
+chatiq (adapter): locations sibling stub: [####################] 100% -> Phase 0 adapter
+```
+
+**Next:** Operator creates Supabase project; then Phase 1 command implementations.
 
 ### 2026-11-04 — Sibling folder scaffolded
 
