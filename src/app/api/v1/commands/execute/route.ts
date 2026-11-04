@@ -1,48 +1,71 @@
 import { NextResponse } from "next/server";
 
+import {
+  executeLocationsCommand,
+  statusForCommandResult,
+  type LocationsCommandExecuteRequest,
+} from "@/lib/command-execute";
 import { LOCATIONS_API_CONTRACT_VERSION } from "@/lib/contract";
 import { requireServiceAuth } from "@/lib/env";
 
 export const runtime = "nodejs";
 
-/**
- * Phase 0 stub: auth + contract echo. Real place/zone/map commands land in Phase 1.
- */
 export async function POST(request: Request) {
   if (!requireServiceAuth(request.headers.get("authorization"))) {
     return NextResponse.json(
-      { ok: false, error: "Unauthorized", code: "UNAUTHORIZED" },
+      {
+        contract_version: LOCATIONS_API_CONTRACT_VERSION,
+        ok: false,
+        error: "Unauthorized",
+        code: "UNAUTHORIZED",
+      },
       { status: 401 }
     );
   }
 
-  let body: { command?: unknown; slots?: unknown } = {};
+  let body: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    body = await request.json();
   } catch {
     return NextResponse.json(
-      { ok: false, error: "Invalid JSON", code: "INVALID_JSON" },
+      {
+        contract_version: LOCATIONS_API_CONTRACT_VERSION,
+        ok: false,
+        error: "Invalid JSON body",
+        code: "INVALID_JSON",
+      },
       { status: 400 }
     );
   }
 
-  const command =
-    typeof body.command === "string" ? body.command.trim() : "";
-  if (!command) {
+  const req = body as LocationsCommandExecuteRequest;
+  if (
+    req.contract_version &&
+    req.contract_version !== LOCATIONS_API_CONTRACT_VERSION
+  ) {
     return NextResponse.json(
-      { ok: false, error: "command required", code: "INVALID_COMMAND" },
+      {
+        contract_version: LOCATIONS_API_CONTRACT_VERSION,
+        ok: false,
+        error: `Unsupported contract_version: ${req.contract_version}`,
+        code: "UNSUPPORTED_CONTRACT",
+      },
       { status: 400 }
     );
   }
 
-  return NextResponse.json(
-    {
-      ok: false,
-      error: "Command not implemented yet",
-      code: "NOT_IMPLEMENTED",
-      contract_version: LOCATIONS_API_CONTRACT_VERSION,
-      command,
-    },
-    { status: 501 }
-  );
+  if (!req.command || typeof req.command !== "string") {
+    return NextResponse.json(
+      {
+        contract_version: LOCATIONS_API_CONTRACT_VERSION,
+        ok: false,
+        error: "command required",
+        code: "INVALID_COMMAND",
+      },
+      { status: 400 }
+    );
+  }
+
+  const result = await executeLocationsCommand(req);
+  return NextResponse.json(result, { status: statusForCommandResult(result) });
 }

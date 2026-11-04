@@ -24,7 +24,7 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | Commands execute stub (`NOT_IMPLEMENTED`) + auth | ✅ 2026-11-05 |
 | ChatIQ adapter stub + fail closed; no calls when gated off | ✅ 2026-11-05 (in `chatiq`) |
 | Core SQL migration draft + supabase client/probe | ✅ 2026-11-05 |
-| Shared booking Supabase + apply `_locations_*` migration | **You** — see [`dev_docs/supabase-setup.md`](./dev_docs/supabase-setup.md) |
+| Shared booking Supabase + apply `_locations_*` migration | ✅ 2026-11-05 |
 | Vercel project + production deploy | Not started |
 
 ### Phase 1 — Organic data + commands (manual path)
@@ -32,9 +32,9 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | Work | Status |
 |------|--------|
 | Places · layouts · zones · publications SoT (`_locations_*` on shared booking DB) | Schema v0 drafted; apply migration |
-| Staff: `place.*` / `zone.*` / `zone.publish` | Spec’d — implement next |
-| Guest: `places.list` / `place.get_context` / `map.resolve_item` | Spec’d — implement next |
-| Smoke: create place → zone → one item → publish → resolve | Not started |
+| Staff: `place.*` / `zone.*` / `zone.publish` | ✅ 2026-11-05 |
+| Guest: `places.list` / `place.get_context` / `map.resolve_item` / coverage / place map | ✅ 2026-11-05 |
+| Smoke: create place → zone → one item → publish → resolve | `npm run smoke:organic` |
 | Operator UI: minimal place/zone/item + publish | Not started |
 
 **Pilot DoD (manual):** Allowlisted bot answers “where is oat milk?” from a manually published zone — **no vision**.
@@ -71,5 +71,5 @@ Geo place pick · recipe shopping · field-level review UI · mobile capture · 
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [######______________] ~28% -> Adapter + schema draft; create Supabase project next
+chatiq-locations: sibling v1: [##########__________] ~48% -> Phase 1 commands; organic smoke
 ```

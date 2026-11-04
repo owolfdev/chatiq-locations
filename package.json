@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start -p 3004",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0 || true",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:organic": "node scripts/smoke-organic.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

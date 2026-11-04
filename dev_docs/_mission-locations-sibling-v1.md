@@ -20,9 +20,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-05):** Create dedicated Supabase project + apply `supabase/migrations/20261105000000_locations_core_v0.sql` ([`supabase-setup.md`](./supabase-setup.md)). Then implement Phase 1 commands (`place.*` / `zone.*` / `map.resolve_item`). Vercel when ready to deploy.
+**Next action (2026-11-05):** Minimal operator UI and/or ChatIQ wire-up for pilot bot (`LOCATIONS_RUNTIME=sibling`). Vercel when ready to deploy. Extraction stays Phase 2.
 
-Treat `locations_mode=full` as pilot-only / broken-glass until commands + smoke.
+Treat `locations_mode=full` as pilot-only until ChatIQ adapter env is set and chat smoke passes.
 
 ## Decisions (locked 2026-11-04)
 
@@ -59,9 +59,9 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ### Phase 1 — Organic data + commands (deterministic, **manual first**)
 
-- [ ] Migrate or re-home canonical tables (places, zones, scans, publications) into sibling Supabase (or clear cutover plan from ChatIQ Postgres)
-- [ ] Commands/API per [`locations-command-library.md`](./locations-command-library.md): places, zones, publish, `map.resolve_item` (extract jobs can stub)
-- [ ] Smoke **without vision**: create place → zone → one item → publish → resolve
+- [x] `_locations_*` tables on shared booking Supabase
+- [x] Commands/API: places, zones, publish, `map.resolve_item` (+ coverage / place map)
+- [x] Smoke **without vision**: `npm run smoke:organic`
 - [ ] Minimal operator UI for that path
 - [ ] **Pilot DoD (manual):** allowlisted bot can answer “where is X?” from published sibling data
 
@@ -92,6 +92,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-05 — Phase 1 organic commands
+
+**What changed:** Shared DB with `_locations_*` prefix applied; store + `executeLocationsCommand` for place/zone/items/publish/resolve; `npm run smoke:organic` green locally.
+
+**Verified:** `/api/health` persistence=supabase; organic smoke place→zone→oat milk→publish→resolve.
+
+```text
+chatiq-locations: sibling v1: [##########__________] ~48% -> Operator UI / ChatIQ pilot wire-up next
+```
 
 ### 2026-11-05 — Adapter stub + Supabase skeleton
 
