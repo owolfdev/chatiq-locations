@@ -1,43 +1,50 @@
 # Supabase setup — `chatiq-locations`
 
-Dedicated project (do **not** reuse ChatIQ or booking Supabase).
+**Shared project with booking** (same URL/keys as `chatiq-booking`). Locations tables use a `_locations_` prefix so they sort together and stay visually isolated from booking tables in the dashboard.
 
-## 1. Create project
+Storage buckets (when added): `_locations_*` or `locations-*` — same isolation idea.
 
-1. [Supabase dashboard](https://supabase.com/dashboard) → New project (e.g. `chatiq-locations`).
-2. Region: prefer same as ChatIQ/booking for latency.
-3. Save DB password in your password manager.
+## Naming
 
-## 2. Apply migration
+| Logical | Physical table |
+|---------|----------------|
+| places | `_locations_places` |
+| place ↔ bot | `_locations_place_bots` |
+| layout versions | `_locations_place_layout_versions` |
+| zones | `_locations_zones` |
+| zone items | `_locations_zone_items` |
+| publications | `_locations_zone_publications` |
 
-SQL Editor → paste / run:
+App code should use [`src/lib/supabase/tables.ts`](../src/lib/supabase/tables.ts) — not bare strings.
 
-[`../supabase/migrations/20261105000000_locations_core_v0.sql`](../supabase/migrations/20261105000000_locations_core_v0.sql)
+Booking tables stay unprefixed for now (live schema). No rename required.
 
-Or with CLI (once linked):
+## 1. Env (local + Vercel)
 
-```bash
-npx supabase db push
-```
-
-## 3. Env (local + Vercel)
-
-From Project Settings → API:
+Reuse booking project credentials in `.env.local` (same as `chatiq-booking`):
 
 | Env | Value |
 |-----|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Booking project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable / anon key |
 | `SUPABASE_SECRET_KEY` | Service role / secret key |
 | `LOCATIONS_SERVICE_TOKEN` | Shared with ChatIQ `LOCATIONS_SIBLING_TOKEN` |
 
-Copy [`.env.example`](../.env.example) → `.env.local`.
+## 2. Apply migration
 
-## 4. Verify
+SQL Editor → run:
+
+[`../supabase/migrations/20261105000000_locations_core_v0.sql`](../supabase/migrations/20261105000000_locations_core_v0.sql)
+
+Safe on a DB that already has booking tables — only creates `_locations_*`.
+
+If you already ran an older unprefixed draft (`places`, `zones`, …), drop those empty tables first or skip — this migration uses the prefixed names only.
+
+## 3. Verify
 
 ```bash
 npm run dev
 curl -s http://localhost:3004/api/health
 ```
 
-Expect `"persistence":"supabase"` and `supabase.reachable: true` once migration is applied.
+Expect `"persistence":"supabase"` and `supabase.reachable: true`.
