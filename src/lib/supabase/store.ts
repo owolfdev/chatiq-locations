@@ -684,6 +684,28 @@ function queryTokens(query: string): string[] {
     .filter((t) => t.length >= 3);
 }
 
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+  for (let i = 0; i < rows; i++) dp[i][0] = i;
+  for (let j = 0; j < cols; j++) dp[0][j] = j;
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[a.length][b.length];
+}
+
 function textMatchesQuery(haystack: string, query: string): boolean {
   const hay = normalizeSearchText(haystack);
   const q = normalizeSearchText(query);
@@ -691,17 +713,36 @@ function textMatchesQuery(haystack: string, query: string): boolean {
   if (hay.includes(q) || q.includes(hay)) return true;
   const tokens = queryTokens(q);
   if (tokens.length === 0) return false;
-  // All tokens must appear (order-independent) for multi-word; any for single.
   if (tokens.length === 1) return hay.includes(tokens[0]);
-  return tokens.every((t) => hay.includes(t));
+  // All tokens, or last token as primary noun when distinctive (≥6): "breakfast cereal"
+  if (tokens.every((t) => hay.includes(t))) return true;
+  const primary = tokens[tokens.length - 1];
+  return primary.length >= 6 && hay.includes(primary);
 }
 
-/** Softer match for zone labels (e.g. "deli meat" → Delicatessen). */
+/** Softer match for zone labels (e.g. "deli meat" → Delicatessen, "friut" → Fruit). */
 function zoneLabelMatchesQuery(zoneHay: string, query: string): boolean {
   if (textMatchesQuery(zoneHay, query)) return true;
   const hay = normalizeSearchText(zoneHay);
   const tokens = queryTokens(query);
-  return tokens.some((t) => t.length >= 4 && hay.includes(t));
+  // "deli" in Delicatessen; require token ≥4
+  if (tokens.some((t) => t.length >= 4 && hay.includes(t))) return true;
+
+  // Typo tolerance vs zone label tokens only (friut → fruit).
+  // Equal-length + dist≤2 catches transpositions; avoid cereal≈cream (diff len).
+  const labelTokens = hay.split(" ").filter((t) => t.length >= 4);
+  const fuzzySources =
+    tokens.length <= 1 ? tokens : [tokens[tokens.length - 1]];
+  for (const part of fuzzySources) {
+    if (part.length < 4) continue;
+    for (const label of labelTokens) {
+      if (part[0] !== label[0]) continue;
+      const dist = editDistance(part, label);
+      if (part.length === label.length && dist <= 2) return true;
+      if (Math.abs(part.length - label.length) === 1 && dist <= 1) return true;
+    }
+  }
+  return false;
 }
 
 export async function resolveItem(input: {
