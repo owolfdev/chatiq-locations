@@ -52,7 +52,8 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 
 | Work | Status |
 |------|--------|
-| `locations_mode=full` + sibling env → places.list + map.resolve_item | ✅ 2026-11-06 (ChatIQ wire) |
+| `locations_mode=full` + sibling env → places.list + map.resolve_item | ✅ 2026-11-06 |
+| LLM concierge tool loop + one bot ↔ one place | ✅ 2026-11-06 (ChatIQ) |
 | Demote/delete in-process `locations-flow` / extract in ChatIQ | Partial — sibling path preferred when gated; legacy still present when sibling off |
 | Pilot smoke end-to-end in chat | Data imported from ChatIQ (4 places / 64 zones); chat smoke next |
 | Import legacy ChatIQ published map → `_locations_*` | ✅ 2026-11-06 (`npm run import:chatiq`) |

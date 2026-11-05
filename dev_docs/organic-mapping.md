@@ -20,8 +20,9 @@ A **place** (store) can exist as soon as it is created — incomplete is fine. O
 4. **Zone is the unit of mapping.** Aisle / section / endcap / cooler — same `zone` model (`zone_type` + `zone_label`).
 5. **Draft vs published.** Pending review is editable; **publish** makes knowledge shopper-visible. Incomplete places still answer honestly: “not mapped yet.”
 6. **Layout eras.** Material remodel → new `place_layout_version`; don’t pretend old zones are current.
-7. **Concierge honesty.** Answers use latest published map for the selected place only; missing item → say so; optional “change store” later.
-8. **Vision is optional acceleration.** Manual zone + item entry must work without photos (Phase 1). Extraction hardens in Phase 2.
+7. **Concierge honesty.** Answers use latest published map for the bot’s **one bound place** only; missing item → say so. (One ChatIQ bot ↔ one place — no multi-store picker in chat.)
+8. **LLM interprets; sibling executes.** Natural language goes to the ChatIQ locations concierge; typed commands hit `chatiq-locations`. See [`../../chatiq/dev_docs/item-location-knowledge/locations-concierge-architecture.md`](../../chatiq/dev_docs/item-location-knowledge/locations-concierge-architecture.md).
+9. **Vision is optional acceleration.** Manual zone + item entry must work without photos (Phase 1). Extraction hardens in Phase 2.
 
 ## Examples (all valid)
 
