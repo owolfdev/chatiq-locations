@@ -219,7 +219,14 @@ export async function listPlacesForBot(input: {
   if (error) {
     throw new LocationsStoreError(error.message, "PLACES_LIST_FAILED");
   }
-  return (data || []) as PlaceRow[];
+  const deduped: PlaceRow[] = [];
+  const seen = new Set<string>();
+  for (const row of (data || []) as PlaceRow[]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    deduped.push(row);
+  }
+  return deduped;
 }
 
 export async function getPlace(place_id: string): Promise<PlaceRow> {
@@ -663,6 +670,40 @@ export async function getPlaceContext(place_id: string): Promise<{
   };
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function queryTokens(query: string): string[] {
+  return normalizeSearchText(query)
+    .split(" ")
+    .filter((t) => t.length >= 3);
+}
+
+function textMatchesQuery(haystack: string, query: string): boolean {
+  const hay = normalizeSearchText(haystack);
+  const q = normalizeSearchText(query);
+  if (!hay || !q) return false;
+  if (hay.includes(q) || q.includes(hay)) return true;
+  const tokens = queryTokens(q);
+  if (tokens.length === 0) return false;
+  // All tokens must appear (order-independent) for multi-word; any for single.
+  if (tokens.length === 1) return hay.includes(tokens[0]);
+  return tokens.every((t) => hay.includes(t));
+}
+
+/** Softer match for zone labels (e.g. "deli meat" → Delicatessen). */
+function zoneLabelMatchesQuery(zoneHay: string, query: string): boolean {
+  if (textMatchesQuery(zoneHay, query)) return true;
+  const hay = normalizeSearchText(zoneHay);
+  const tokens = queryTokens(query);
+  return tokens.some((t) => t.length >= 4 && hay.includes(t));
+}
+
 export async function resolveItem(input: {
   place_id: string;
   item_query: string;
@@ -676,7 +717,7 @@ export async function resolveItem(input: {
     near_landmark: string | null;
   }>;
 }> {
-  const query = input.item_query.trim().toLowerCase();
+  const query = input.item_query.trim();
   if (!query) {
     return { matches: [] };
   }
@@ -693,16 +734,66 @@ export async function resolveItem(input: {
     throw new LocationsStoreError(error.message, "RESOLVE_FAILED");
   }
 
-  const matches: Array<{
+  const zoneIds = [...new Set((pubs || []).map((p) => p.zone_id as string))];
+  const zoneById = new Map<
+    string,
+    { zone_type: string; zone_label: string; near_landmark: string | null }
+  >();
+  if (zoneIds.length > 0) {
+    const { data: zones } = await supabase
+      .from(LOCATIONS_TABLES.zones)
+      .select("id, zone_type, zone_label, near_landmark")
+      .in("id", zoneIds);
+    for (const z of zones || []) {
+      zoneById.set(z.id as string, {
+        zone_type: (z.zone_type as string) || "zone",
+        zone_label: (z.zone_label as string) || "",
+        near_landmark: (z.near_landmark as string) || null,
+      });
+    }
+  }
+
+  type Match = {
     zone_id: string;
     zone_type: string;
     zone_label: string;
     publication_id: string;
     matched_name: string;
     near_landmark: string | null;
-  }> = [];
+  };
+  const zoneMatches: Match[] = [];
+  const itemMatches: Match[] = [];
+  const matchedZones = new Set<string>();
 
+  // Pass 1: zone labels (prefer "Fruit" section over items named "fruit pastilles")
   for (const pub of pubs || []) {
+    const zoneId = pub.zone_id as string;
+    const zone = zoneById.get(zoneId);
+    const zoneType = zone?.zone_type || "zone";
+    const zoneLabel = zone?.zone_label || "";
+    const near = zone?.near_landmark || null;
+    const zoneHay = `${zoneType} ${zoneLabel}`;
+    if (zoneLabelMatchesQuery(zoneHay, query)) {
+      zoneMatches.push({
+        zone_id: zoneId,
+        zone_type: zoneType,
+        zone_label: zoneLabel,
+        publication_id: pub.id as string,
+        matched_name: zoneLabel || (pub.title as string) || "this section",
+        near_landmark: near,
+      });
+      matchedZones.add(zoneId);
+    }
+  }
+
+  // Pass 2: item names for zones not already claimed by label
+  for (const pub of pubs || []) {
+    const zoneId = pub.zone_id as string;
+    if (matchedZones.has(zoneId)) continue;
+    const zone = zoneById.get(zoneId);
+    const zoneType = zone?.zone_type || "zone";
+    const zoneLabel = zone?.zone_label || "";
+    const near = zone?.near_landmark || null;
     const snapshot = Array.isArray(pub.items_snapshot)
       ? pub.items_snapshot
       : [];
@@ -714,27 +805,23 @@ export async function resolveItem(input: {
             ? item.raw_label
             : "";
       if (!name) continue;
-      const hay = name.toLowerCase();
-      if (hay.includes(query) || query.includes(hay)) {
-        const { data: zone } = await supabase
-          .from(LOCATIONS_TABLES.zones)
-          .select("zone_type, zone_label, near_landmark")
-          .eq("id", pub.zone_id)
-          .maybeSingle();
-        matches.push({
-          zone_id: pub.zone_id as string,
-          zone_type: (zone?.zone_type as string) || "zone",
-          zone_label: (zone?.zone_label as string) || "",
+      const brand = typeof item?.brand === "string" ? item.brand : "";
+      if (textMatchesQuery(`${name} ${brand}`, query)) {
+        itemMatches.push({
+          zone_id: zoneId,
+          zone_type: zoneType,
+          zone_label: zoneLabel,
           publication_id: pub.id as string,
           matched_name: name,
-          near_landmark: (zone?.near_landmark as string) || null,
+          near_landmark: near,
         });
+        matchedZones.add(zoneId);
         break;
       }
     }
   }
 
-  return { matches };
+  return { matches: [...zoneMatches, ...itemMatches] };
 }
 
 export async function getPlaceMap(place_id: string): Promise<{

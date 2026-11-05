@@ -40,6 +40,18 @@ Safe on a DB that already has booking tables — only creates `_locations_*`.
 
 If you already ran an older unprefixed draft (`places`, `zones`, …), drop those empty tables first or skip — this migration uses the prefixed names only.
 
+## Import legacy ChatIQ maps
+
+One-shot copy of published places/zones/items from ChatIQ `bot_*` tables into `_locations_*`:
+
+```bash
+# from chatiq-locations/
+npm run import:chatiq -- --dry-run
+npm run import:chatiq
+```
+
+Requires `../chatiq/.env.local` (source) and `./.env.local` (dest). Preserves UUIDs. Re-runnable (upsert).
+
 ## 3. Verify
 
 ```bash
