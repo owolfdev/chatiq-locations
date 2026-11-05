@@ -20,9 +20,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-05):** Minimal operator UI and/or ChatIQ wire-up for pilot bot (`LOCATIONS_RUNTIME=sibling`). Vercel when ready to deploy. Extraction stays Phase 2.
+**Next action (2026-11-06):** Seed a place for a real pilot bot (`place.create` with that `bot_id`), set bot `locations_mode=full`, confirm chat “where is oat milk?”. Then minimal operator UI. Extraction stays Phase 2.
 
-Treat `locations_mode=full` as pilot-only until ChatIQ adapter env is set and chat smoke passes.
+ChatIQ env: `LOCATIONS_RUNTIME=sibling`, `LOCATIONS_SIBLING_URL=https://chatiq-locations.vercel.app`, matching token, optional `LOCATIONS_SIBLING_BOT_IDS`.
 
 ## Decisions (locked 2026-11-04)
 
@@ -73,7 +73,7 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ### Phase 3 — ChatIQ concierge thin path
 
-- [ ] `locations_mode=full` + allowlist → ChatIQ calls sibling for place map / item-zone answers (LLM interprets; sibling returns structured place knowledge)
+- [x] `locations_mode=full` + sibling env → ChatIQ uses sibling `places.list` + `map.resolve_item` (deterministic reply)
 - [ ] In-process `locations-flow` / extraction paths demoted or deleted behind flag
 - [ ] Pilot bot smoke: select place → “where is X?” from published sibling data (manual and/or extracted)
 
@@ -92,6 +92,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-06 — ChatIQ sibling wire + Vercel
+
+**What changed:** Production deploy health green. ChatIQ loads places from sibling when gated; item lookups call `map.resolve_item` and return aisle answers (skips in-process place concierge/recipe when sibling on).
+
+**Next:** Create place for pilot bot_id via commands API; chat smoke with `locations_mode=full`.
+
+```text
+chatiq-locations: [############________] ~58% -> Pilot chat smoke
+```
 
 ### 2026-11-05 — Phase 1 organic commands
 

@@ -25,7 +25,7 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | ChatIQ adapter stub + fail closed; no calls when gated off | ✅ 2026-11-05 (in `chatiq`) |
 | Core SQL migration draft + supabase client/probe | ✅ 2026-11-05 |
 | Shared booking Supabase + apply `_locations_*` migration | ✅ 2026-11-05 |
-| Vercel project + production deploy | Not started |
+| Vercel project + production deploy | ✅ https://chatiq-locations.vercel.app (health green 2026-11-06) |
 
 ### Phase 1 — Organic data + commands (manual path)
 
@@ -52,9 +52,9 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 
 | Work | Status |
 |------|--------|
-| `locations_mode=full` + allowlist → sibling commands | Not started |
-| Demote/delete in-process `locations-flow` / extract in ChatIQ | Not started |
-| Pilot smoke end-to-end in chat | Not started |
+| `locations_mode=full` + sibling env → places.list + map.resolve_item | ✅ 2026-11-06 (ChatIQ wire) |
+| Demote/delete in-process `locations-flow` / extract in ChatIQ | Partial — sibling path preferred when gated; legacy still present when sibling off |
+| Pilot smoke end-to-end in chat | Needs place linked to real bot_id + `locations_mode=full` |
 
 ### Phase 4 — Strangler closeout
 
@@ -71,5 +71,5 @@ Geo place pick · recipe shopping · field-level review UI · mobile capture · 
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [##########__________] ~48% -> Phase 1 commands; organic smoke
+chatiq-locations: sibling v1: [############________] ~58% -> ChatIQ wire live; pilot chat smoke next
 ```
