@@ -798,10 +798,22 @@ export async function resolveItem(input: {
     zone_id: string;
     zone_type: string;
     zone_label: string;
+    /** Shopper-facing location, e.g. "Aisle 6" or "Household section". */
+    where: string;
     publication_id: string;
     matched_name: string;
     near_landmark: string | null;
   };
+
+  function formatWhere(zoneType: string, zoneLabel: string): string {
+    const label = zoneLabel.trim();
+    const type = zoneType.trim().toLowerCase();
+    if (!label) return type || "unknown area";
+    if (/^aisle\b/i.test(label)) return label;
+    if (type === "aisle") return `Aisle ${label}`;
+    if (type === "section") return `${label} section`;
+    return `${type} ${label}`.trim();
+  }
   const zoneMatches: Match[] = [];
   const itemMatches: Match[] = [];
   const matchedZones = new Set<string>();
@@ -819,6 +831,7 @@ export async function resolveItem(input: {
         zone_id: zoneId,
         zone_type: zoneType,
         zone_label: zoneLabel,
+        where: formatWhere(zoneType, zoneLabel),
         publication_id: pub.id as string,
         matched_name: zoneLabel || (pub.title as string) || "this section",
         near_landmark: near,
@@ -852,6 +865,7 @@ export async function resolveItem(input: {
           zone_id: zoneId,
           zone_type: zoneType,
           zone_label: zoneLabel,
+          where: formatWhere(zoneType, zoneLabel),
           publication_id: pub.id as string,
           matched_name: name,
           near_landmark: near,
