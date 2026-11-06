@@ -93,6 +93,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-07 — ChatIQ legacy Locations archive fence
+
+**What changed (in `chatiq`):** Soft-landed `/dashboard/locations/**`; removed sidebar entry; archived in-process docs under `dev_docs/item-location-knowledge/_archive/2026-legacy-inprocess/`; roadmaps/`_active-focus` point only at this sibling for product work.
+
+**Next:** Operator UI / denser map coverage (e.g. Bangkapi peanut butter, cereal, flour gaps).
+
+```text
+chatiq: [####################] archive fence done
+chatiq-locations: [###############_____] ~72% -> Operator UI / coverage
+```
+
 ### 2026-11-06 — Villa bind + resolve matcher
 
 **What changed:** Grocery bot unbound from Fuji/Gourmet (was answering Fuji “Paper Products” shelf); bound **Villa Market Thong Lo** only. Resolve matcher: whole-word tokens (scott≠scottish), generic last-token guard (`paper products`≠tomato products), aisle-first match rank, shelf `where` phrasing.

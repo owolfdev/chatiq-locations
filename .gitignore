@@ -28,3 +28,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Large local examination dumps (re-export via scripts/export-bangkapi-exam.mts)
+dev_docs/examination/**/bundle.json

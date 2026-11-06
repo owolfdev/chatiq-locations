@@ -1,6 +1,6 @@
 # What’s next — `chatiq-locations`
 
-Last updated: 2026-11-04
+Last updated: 2026-11-07
 
 **Start here for this repo.** Mission: [`dev_docs/_mission-locations-sibling-v1.md`](./dev_docs/_mission-locations-sibling-v1.md).  
 Principles: [`dev_docs/organic-mapping.md`](./dev_docs/organic-mapping.md) · Salvage: [`dev_docs/locations-salvage.md`](./dev_docs/locations-salvage.md) · Commands: [`dev_docs/locations-command-library.md`](./dev_docs/locations-command-library.md).
@@ -55,16 +55,16 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | `locations_mode=full` + sibling env → places.list + map.resolve_item | ✅ 2026-11-06 |
 | LLM concierge tool loop + one bot ↔ one place | ✅ 2026-11-06 (ChatIQ) |
 | Demote/delete in-process `locations-flow` / extract in ChatIQ | Partial — sibling path preferred when gated; legacy still present when sibling off |
-| Pilot smoke end-to-end in chat | Data imported from ChatIQ (4 places / 64 zones); chat smoke next |
+| Pilot smoke end-to-end in chat | ✅ 2026-11-06/07 Villa + Gourmet Bangkapi |
 | Import legacy ChatIQ published map → `_locations_*` | ✅ 2026-11-06 (`npm run import:chatiq`) |
 
 ### Phase 4 — Strangler closeout
 
 | Work | Status |
 |------|--------|
-| Stop ChatIQ writing location truth | Not started |
-| Archive legacy Locations routes that bypass sibling | Not started |
-| Point all roadmaps / `_active-focus` at sibling only | Not started |
+| Stop ChatIQ writing location truth | Partial — dashboard Locations UI no longer writes (archived soft landing) |
+| Archive legacy Locations routes that bypass sibling | ✅ 2026-11-07 (`/dashboard/locations/**` soft landing; docs → `_archive`) |
+| Point all roadmaps / `_active-focus` at sibling only | ✅ 2026-11-07 |
 
 ## Explicitly later
 
@@ -73,5 +73,5 @@ Geo place pick · recipe shopping · field-level review UI · mobile capture · 
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [############________] ~58% -> ChatIQ wire live; pilot chat smoke next
+chatiq-locations: sibling v1: [###############_____] ~72% -> Operator UI / map coverage next
 ```
