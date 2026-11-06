@@ -7,7 +7,9 @@ import {
   getCoverage,
   getPlaceContext,
   getPlaceMap,
+  bindBotToPlace,
   listPlacesForBot,
+  listPlacesForTeam,
   LocationsStoreError,
   publishZone,
   resolveItem,
@@ -184,6 +186,27 @@ export async function executeLocationsCommand(
           team_id: slotString(slots, "team_id") || req.actor?.team_id || undefined,
         });
         data = { places };
+        break;
+      }
+      case "places.list_for_team": {
+        const team_id = requireTeamId(req);
+        const places = await listPlacesForTeam({ team_id });
+        data = { places };
+        break;
+      }
+      case "place.bind_bot": {
+        const team_id = requireTeamId(req);
+        const bot_id =
+          slotString(slots, "bot_id") || req.actor?.bot_id || null;
+        if (!bot_id) {
+          throw new LocationsStoreError("bot_id required", "INVALID_REQUEST");
+        }
+        const rawPlace = slots.place_id;
+        const place_id =
+          rawPlace === null || rawPlace === ""
+            ? null
+            : slotString(slots, "place_id");
+        data = await bindBotToPlace({ team_id, bot_id, place_id });
         break;
       }
       case "place.get_context": {

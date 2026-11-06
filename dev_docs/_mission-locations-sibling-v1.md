@@ -95,6 +95,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-07 — Bound-place picker + mapper handoff
+
+**What changed:** Sibling commands `places.list_for_team` + `place.bind_bot`; ChatIQ bot Settings bound-place dropdown + Open store mapper → `/map?place_id=`; sibling `/map` placeholder page.
+
+**Next:** Real mapper shell (text/camera/compass) + deploy both apps.
+
+```text
+chatiq: [##################__] control plane picker shipped (needs deploy)
+chatiq-locations: [################____] ~78% -> Mapper shell
+```
+
 ### 2026-11-07 — Operator input + hosting split locked
 
 **What changed (docs):** [`operator-input-and-hosting.md`](./operator-input-and-hosting.md) — ChatIQ control plane (mode + bound place + Open mapper) vs sibling mapper (text/image/compass, source-agnostic ingest, LLM normalize, ephemeral photos). Roadmap Phase 1b added.

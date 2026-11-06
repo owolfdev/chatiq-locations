@@ -174,6 +174,99 @@ export async function updatePlace(input: {
   return data as PlaceRow;
 }
 
+/** All active places for a team (operator control plane). */
+export async function listPlacesForTeam(input: {
+  team_id: string;
+}): Promise<PlaceRow[]> {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.places)
+    .select("id, team_id, primary_bot_id, name, address, is_active")
+    .eq("team_id", input.team_id)
+    .eq("is_active", true)
+    .order("name");
+  if (error) {
+    throw new LocationsStoreError(error.message, "PLACES_LIST_FAILED");
+  }
+  return (data || []) as PlaceRow[];
+}
+
+/**
+ * One bot ↔ one place: clear this bot from all team places, then bind to place_id
+ * (or unbind when place_id is null).
+ */
+export async function bindBotToPlace(input: {
+  team_id: string;
+  bot_id: string;
+  place_id: string | null;
+}): Promise<{ place: PlaceRow | null; places: PlaceRow[] }> {
+  const supabase = client();
+  const bot_id = input.bot_id.trim();
+  const team_id = input.team_id.trim();
+  if (!bot_id || !team_id) {
+    throw new LocationsStoreError(
+      "team_id and bot_id required",
+      "INVALID_REQUEST"
+    );
+  }
+
+  if (input.place_id) {
+    const place = await getPlace(input.place_id);
+    if (place.team_id !== team_id) {
+      throw new LocationsStoreError("Place team mismatch", "FORBIDDEN");
+    }
+    if (!place.is_active) {
+      throw new LocationsStoreError("Place is inactive", "PLACE_INACTIVE");
+    }
+  }
+
+  // Drop place_bots links for this bot
+  await supabase.from(LOCATIONS_TABLES.placeBots).delete().eq("bot_id", bot_id);
+
+  // Clear primary on any team place that pointed at this bot
+  await supabase
+    .from(LOCATIONS_TABLES.places)
+    .update({
+      primary_bot_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("team_id", team_id)
+    .eq("primary_bot_id", bot_id);
+
+  let bound: PlaceRow | null = null;
+  if (input.place_id) {
+    const { data, error } = await supabase
+      .from(LOCATIONS_TABLES.places)
+      .update({
+        primary_bot_id: bot_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.place_id)
+      .eq("team_id", team_id)
+      .select("id, team_id, primary_bot_id, name, address, is_active")
+      .single();
+    if (error || !data) {
+      throw new LocationsStoreError(
+        error?.message || "Failed to bind place",
+        "PLACE_BIND_FAILED"
+      );
+    }
+    const { error: linkError } = await supabase
+      .from(LOCATIONS_TABLES.placeBots)
+      .upsert({ place_id: input.place_id, bot_id });
+    if (linkError) {
+      throw new LocationsStoreError(
+        linkError.message,
+        "PLACE_BOT_LINK_FAILED"
+      );
+    }
+    bound = data as PlaceRow;
+  }
+
+  const places = await listPlacesForTeam({ team_id });
+  return { place: bound, places };
+}
+
 export async function listPlacesForBot(input: {
   bot_id: string;
   team_id?: string;

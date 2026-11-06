@@ -41,6 +41,8 @@ Auth: shared service token (mirror booking). Fail closed when unset.
 | Command | Slots (sketch) | Returns |
 |---------|----------------|---------|
 | `place.create` / `place.update` | name, address?, bot links | `place_id` |
+| `places.list_for_team` | `team_id` | All active team places (operator picker) |
+| `place.bind_bot` | `team_id`, `bot_id`, `place_id` \| null | One bot ↔ one place bind/unbind |
 | `layout.create` / `layout.activate` | `place_id`, notes? | `layout_version_id` |
 | `zone.upsert` | `layout_version_id`, `zone_type`, `zone_label`, description?, neighbors? | `zone_id` |
 | `zone.set_items` | `zone_id`, items[] (append or replace flag) | Updated pending or draft snapshot |
