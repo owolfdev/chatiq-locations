@@ -1,45 +1,46 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-04  
-Status: **Phase 0 scaffolded locally** — health + env contract. Vercel + ChatIQ adapter stub still open. In-process ChatIQ Locations stays quarantined.
+Last updated: 2026-11-07  
+Status: **Sibling live** (pilots + concierge). Next: ChatIQ bound-place picker + sibling mapper shell per locked input/hosting spec.
 
 Owner: Engineering
 
-**Prior art (keep; do not rewrite product model):** [`../../chatiq/dev_docs/item-location-knowledge/`](../../chatiq/dev_docs/item-location-knowledge/) design / DoD / extraction docs.  
+**Prior art:** organic mapping + archived ChatIQ Locations design.  
 **Pattern:** same strangler as booking → [`../../chatiq-booking/dev_docs/_mission-booking-sibling-v1.md`](../../chatiq-booking/dev_docs/_mission-booking-sibling-v1.md).  
 **Repo roadmap:** [`../ROADMAP.md`](../ROADMAP.md) · Workspace index: [`../../ROADMAP.md`](../../ROADMAP.md).
 
-**Spec pack (2026-11-04):**
+**Spec pack:**
 
 | Doc | Role |
 |-----|------|
 | [`organic-mapping.md`](./organic-mapping.md) | Product principles — place first, any grain, multi-agent, draft vs publish |
+| [`operator-input-and-hosting.md`](./operator-input-and-hosting.md) | **Locked 2026-11-07** — ChatIQ control plane vs sibling mapper; source-agnostic ingest |
 | [`locations-salvage.md`](./locations-salvage.md) | Keep / Adapt / Defer / Drop from in-`chatiq` work |
 | [`locations-command-library.md`](./locations-command-library.md) | Concierge + staff + extract command contract draft |
 | [`../ROADMAP.md`](../ROADMAP.md) | Phased plan + progress snapshot |
 
 ## Resume here (next session)
 
-**Next action (2026-11-06):** Seed a place for a real pilot bot (`place.create` with that `bot_id`), set bot `locations_mode=full`, confirm chat “where is oat milk?”. Then minimal operator UI. Extraction stays Phase 2.
+**Next action (2026-11-07):** Implement ChatIQ **bound place** picker + “Open store mapper” link; scaffold sibling mapper shell (text/image/compass) per [`operator-input-and-hosting.md`](./operator-input-and-hosting.md).
 
-ChatIQ env: `LOCATIONS_RUNTIME=sibling`, `LOCATIONS_SIBLING_URL=https://chatiq-locations.vercel.app`, matching token, optional `LOCATIONS_SIBLING_BOT_IDS`.
+ChatIQ env: `LOCATIONS_RUNTIME=sibling`, `LOCATIONS_SIBLING_URL`, matching token, optional `LOCATIONS_SIBLING_BOT_IDS`.
 
-## Decisions (locked 2026-11-04)
+## Decisions (locked)
 
 | Topic | Choice |
 |-------|--------|
-| **Shape** | New sibling Next.js app **`chatiq-locations/`** (own git repo + Vercel project). Not a folder bolted deeper into ChatIQ. |
-| **Why sibling** | Locations is a **mapping + vision + publish** product, not core chat. In-process work paused on multi-image extraction operability and polluted chat isolation — same class of problem that forced booking out. |
-| **Organic mapping** | Place first; aisle/zone/item anytime; multi-agent additive; publish gates shopper answers. See [`organic-mapping.md`](./organic-mapping.md). |
-| **ChatIQ touch** | Thin HTTP adapter + existing `locations_mode` gate (`off` / `shadow` / `full`). No new extraction/business logic in `handleChatRequest`. |
-| **Operator UI** | Capture / zone review / publish live **in the sibling** (or ChatIQ thin UI calling sibling APIs later). Prefer sibling-first for extraction ops so vision jobs don’t share ChatIQ deploy risk. |
-| **Source of truth** | Sibling DB owns places / layouts / zones / scans / publications. ChatIQ may keep thin read cache or document publish hooks only as needed for retrieval — not dual-write forever. |
-| **Legacy in-`chatiq`** | Quarantined; mine schema + UX; **strangle** — do not grow extraction runtime in core. Archive/tag when sibling parity exists. |
-| **Product model** | Keep: place → layout version → zone → zone_scan → publish → place-scoped concierge answers. Specs: [`item-location-knowledge-design.md`](../../chatiq/dev_docs/item-location-knowledge/item-location-knowledge-design.md), [`item-location-knowledge-v1-minimal-cut.md`](../../chatiq/dev_docs/item-location-knowledge/item-location-knowledge-v1-minimal-cut.md). |
-| **Phase 1 vs 2** | **Manual** place/zone/item/publish + `map.resolve_item` first (organic). Vision extract hardens in Phase 2 — assist, not required for first pilot answer. |
-| **Extraction** | Sibling owns staged multi-image pipeline + telemetry (per-image progress, failures, recombine). Fix the black box **in the sibling**, not by another monolith patch. |
-| **Rollout** | Allowlist bots (mirror `BOOKING_SIBLING_BOT_IDS` pattern); `locations_mode=full` only when adapter points at sibling and smoke passes. |
-| **Out of scope v1 sibling** | Geo-assisted place pick, live inventory/pricing truth, mobile capture app, recipe shopping (design docs remain future). |
+| **Shape** | Sibling Next.js app **`chatiq-locations/`** (own git + Vercel). |
+| **Why sibling** | Mapping + vision + publish must not ride ChatIQ deploys. |
+| **Organic mapping** | Place first; any grain; multi-agent; publish gates shopper answers. [`organic-mapping.md`](./organic-mapping.md). |
+| **Hosting split** | **ChatIQ** = `locations_mode` + **one bound place** + launch mapper. **Sibling** = mapper UI + ingest/vision/publish engines. [`operator-input-and-hosting.md`](./operator-input-and-hosting.md). |
+| **One bot ↔ one place** | No multi-store picker in shopper chat. |
+| **Source-agnostic ingest** | Image / voice / spreadsheet / chat → text → LLM normalize → draft → publish. |
+| **LLM normalize** | Required for freeform; deterministic sibling applies typed patches only; no auto-publish. |
+| **Mapper UX** | Dead simple: text/speak, camera batch, compass, optional coords; sticky zone; inspect + add item. |
+| **Photos** | Ephemeral evidence; durable SoT is text + pose metadata (+ optional thumbnail). |
+| **Source of truth** | Sibling `_locations_*` DB; no dual-write forever. |
+| **Legacy in-`chatiq`** | Dashboard UI archived 2026-11-07; in-process libs quarantined. |
+| **Out of scope v1** | Geo nearest-store, AR measure, native App Store client, live ERP stock. |
 
 ## 1) Why
 
@@ -62,36 +63,47 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - [x] `_locations_*` tables on shared booking Supabase
 - [x] Commands/API: places, zones, publish, `map.resolve_item` (+ coverage / place map)
 - [x] Smoke **without vision**: `npm run smoke:organic`
-- [ ] Minimal operator UI for that path
-- [ ] **Pilot DoD (manual):** allowlisted bot can answer “where is X?” from published sibling data
+- [ ] ChatIQ bound-place picker + Open mapper link
+- [ ] Sibling mapper shell (text/image/compass) + LLM normalize → draft
+- [x] **Pilot DoD (manual):** allowlisted bots answer “where is X?” (Villa + Gourmet Bangkapi)
 
 ### Phase 2 — Operator extraction (salvage quality)
 
-- [ ] Multi-image pipeline is staged + observable (1 / 3 / 8 image ladder green)
-- [ ] Operator UI for upload → process → review JSON → publish
-- [ ] Failures surface `failure_reason`; raw per-image payloads retained for recombine
+- [ ] Multi-image pipeline staged + observable (1 / 3 / 8 ladder)
+- [ ] Mapper camera batch → draft → review → publish
+- [ ] Failures surface `failure_reason`; full photos TTL / debug retain
 
 ### Phase 3 — ChatIQ concierge thin path
 
-- [x] `locations_mode=full` + sibling env → ChatIQ uses sibling `places.list` + `map.resolve_item` (deterministic reply)
-- [ ] In-process `locations-flow` / extraction paths demoted or deleted behind flag
-- [ ] Pilot bot smoke: select place → “where is X?” from published sibling data (manual and/or extracted)
+- [x] `locations_mode=full` + sibling → LLM concierge + `map.resolve_item`
+- [ ] In-process `locations-flow` / extraction demoted or deleted behind flag
+- [x] Pilot chat smoke (Villa + Bangkapi)
 
 ### Phase 4 — Strangler closeout
 
-- [ ] Document cutover; stop writing location truth in ChatIQ
-- [ ] Archive or soft-land legacy Locations dashboard routes that bypass sibling
-- [ ] Roadmaps / `_active-focus` point only at sibling
+- [x] Soft-land legacy `/dashboard/locations` (2026-11-07)
+- [x] Roadmaps / `_active-focus` point at sibling
+- [ ] Stop any remaining ChatIQ writes to location truth; optional delete in-process libs
 
 ## 3) Non-goals (this mission)
 
 - Replacing the place/zone product design
-- Building mobile zone-capture client
+- Native App Store capture client (mobile web first)
+- AR measuring / CAD floor plans
 - Payments / checkout for retail
-- Broad GTM with `locations_mode=full` before Phase 1 manual smoke (or Phase 2 ladder for vision-led pilots)
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-07 — Operator input + hosting split locked
+
+**What changed (docs):** [`operator-input-and-hosting.md`](./operator-input-and-hosting.md) — ChatIQ control plane (mode + bound place + Open mapper) vs sibling mapper (text/image/compass, source-agnostic ingest, LLM normalize, ephemeral photos). Roadmap Phase 1b added.
+
+**Next:** Build bound-place picker in ChatIQ; scaffold sibling mapper shell.
+
+```text
+chatiq-locations: [###############_____] ~72% -> Bound-place picker + mapper shell
+```
 
 ### 2026-11-07 — ChatIQ legacy Locations archive fence
 

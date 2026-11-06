@@ -33,11 +33,12 @@ Legend: **Keep** = reuse as-is · **Adapt** = move/reshape in sibling · **Defer
 
 | Piece | Verdict | Notes |
 |-------|---------|--------|
-| Locations dashboard (list places, zones, publish) | **Adapt** | Rebuild in sibling-first; ChatIQ thin UI optional later |
-| Manual place pick + stale reconfirm | **Keep** | Concierge still needs place context lifecycle |
-| Raw JSON review before publish | **Keep** (v1) | Field-level review UI later |
-| Multi-image upload extract | **Adapt** | Staged pipeline + progress; fix black box here |
+| Locations dashboard (list places, zones, publish) | **Adapt** | Full mapper in sibling; ChatIQ = mode + bound place + Open mapper ([`operator-input-and-hosting.md`](./operator-input-and-hosting.md)) |
+| Manual place pick + stale reconfirm | **Keep** | Concierge: one bound place per bot |
+| Raw JSON / draft review before publish | **Keep** (v1) | Swipe/list OK; field-level later |
+| Multi-image upload extract | **Adapt** | Sibling camera batch + LLM normalize; ephemeral photos |
 | Guided photo protocol polish | **Defer** | After 1/3/8 ladder green |
+| AR measure / CAD walk | **Defer** | Light aisle-sequence walk only for v1 |
 
 ## Chat / runtime
 

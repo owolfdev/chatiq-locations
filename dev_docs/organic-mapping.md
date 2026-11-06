@@ -1,8 +1,9 @@
 # Organic store mapping (product principles)
 
-Last updated: 2026-11-04  
+Last updated: 2026-11-07  
 Status: **Locked for sibling v1**  
-Mission: [`_mission-locations-sibling-v1.md`](./_mission-locations-sibling-v1.md)
+Mission: [`_mission-locations-sibling-v1.md`](./_mission-locations-sibling-v1.md)  
+Operator input + hosting: [`operator-input-and-hosting.md`](./operator-input-and-hosting.md)
 
 ## Promise
 
@@ -21,8 +22,9 @@ A **place** (store) can exist as soon as it is created — incomplete is fine. O
 5. **Draft vs published.** Pending review is editable; **publish** makes knowledge shopper-visible. Incomplete places still answer honestly: “not mapped yet.”
 6. **Layout eras.** Material remodel → new `place_layout_version`; don’t pretend old zones are current.
 7. **Concierge honesty.** Answers use latest published map for the bot’s **one bound place** only; missing item → say so. (One ChatIQ bot ↔ one place — no multi-store picker in chat.)
-8. **LLM interprets; sibling executes.** Natural language goes to the ChatIQ locations concierge; typed commands hit `chatiq-locations`. See [`../../chatiq/dev_docs/item-location-knowledge/locations-concierge-architecture.md`](../../chatiq/dev_docs/item-location-knowledge/locations-concierge-architecture.md).
-9. **Vision is optional acceleration.** Manual zone + item entry must work without photos (Phase 1). Extraction hardens in Phase 2.
+8. **LLM interprets; sibling executes.** Shopper NL → ChatIQ concierge; operator freeform (text/voice/vision/spreadsheet) → LLM normalize → typed patches in `chatiq-locations`. See [`operator-input-and-hosting.md`](./operator-input-and-hosting.md).
+9. **Vision is optional acceleration.** Manual zone + item entry must work without photos. Capture UI + extraction live in the sibling; ChatIQ only enables mode + binds one place + launches mapper.
+10. **Source-agnostic ingest.** Image, voice, spreadsheet, and chat all become text → normalize → draft → publish.
 
 ## Examples (all valid)
 
