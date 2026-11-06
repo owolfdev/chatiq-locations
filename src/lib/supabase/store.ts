@@ -795,6 +795,15 @@ function zoneLabelMatchesQuery(zoneHay: string, query: string): boolean {
   if (textMatchesQuery(zoneHay, query)) return true;
   const hay = normalizeSearchText(zoneHay);
   const tokens = queryTokens(query);
+  const primary = tokens[tokens.length - 1];
+  // "peanut butter" must not soft-hit the Cheese and Butter section on "butter" alone
+  if (
+    tokens.length >= 2 &&
+    primary &&
+    AMBIGUOUS_PRIMARY_TOKENS.has(primary)
+  ) {
+    return false;
+  }
   // "deli" in Delicatessen; require token ≥4
   if (tokens.some((t) => t.length >= 4 && hay.includes(t))) return true;
 
