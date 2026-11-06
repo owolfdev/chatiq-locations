@@ -722,6 +722,39 @@ const GENERIC_QUERY_TOKENS = new Set([
   "brands",
 ]);
 
+/**
+ * Ambiguous head nouns: "peanut butter" must not match butter cookies.
+ * Require every distinctive token instead of primary-alone fallback.
+ */
+const AMBIGUOUS_PRIMARY_TOKENS = new Set([
+  "butter",
+  "oil",
+  "sauce",
+  "milk",
+  "cream",
+  "juice",
+  "cheese",
+  "sugar",
+  "salt",
+  "rice",
+  "flour",
+  "water",
+  "soup",
+  "tea",
+  "coffee",
+  "cookies",
+  "cookie",
+  "biscuits",
+  "biscuit",
+  "chips",
+  "bars",
+  "bar",
+  "mix",
+  "powder",
+  "paste",
+  "spread",
+]);
+
 function hasWholeToken(hay: string, token: string): boolean {
   const re = new RegExp(`(?:^|\\s)${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`);
   return re.test(hay);
@@ -746,11 +779,13 @@ function textMatchesQuery(haystack: string, query: string): boolean {
   // All tokens, or last token as primary noun when distinctive (≥6): "breakfast cereal"
   if (tokens.every((t) => hay.includes(t))) return true;
   const primary = tokens[tokens.length - 1];
-  if (GENERIC_QUERY_TOKENS.has(primary)) {
-    const distinctive = tokens.filter((t) => !GENERIC_QUERY_TOKENS.has(t));
-    return (
-      distinctive.length > 0 && distinctive.every((t) => hay.includes(t))
-    );
+  // "paper products" / "peanut butter": require every non-generic token
+  if (
+    GENERIC_QUERY_TOKENS.has(primary) ||
+    AMBIGUOUS_PRIMARY_TOKENS.has(primary)
+  ) {
+    const required = tokens.filter((t) => !GENERIC_QUERY_TOKENS.has(t));
+    return required.length > 0 && required.every((t) => hay.includes(t));
   }
   return primary.length >= 6 && hasWholeToken(hay, primary);
 }
