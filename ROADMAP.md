@@ -48,11 +48,11 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 |------|--------|
 | ChatIQ: bound-place picker (one place per bot) | ✅ 2026-11-07 (settings) |
 | ChatIQ: “Open store mapper” → sibling handoff | ✅ 2026-11-07 (link → `/map?place_id=`) |
-| Sibling: `/map` placeholder + `places.list_for_team` / `place.bind_bot` | ✅ 2026-11-07 |
-| Sibling: auth (shared session or handoff) + real mapper shell | Not started |
-| Sibling: text/speak + sticky zone + inspect/add item | Not started |
-| Sibling: camera batch + compass/coords metadata | Not started |
-| Ingest: LLM normalize → draft patch (no auto-publish) | Not started |
+| Sibling: `/map` + `places.list_for_team` / `place.bind_bot` | ✅ 2026-11-07 |
+| Sibling: mapper shell (text/speak, sticky zone, inspect/add, compass/GPS) | ✅ 2026-11-07 |
+| Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract TBD |
+| Ingest: heuristic normalize → upsert/publish (LLM normalize next) | ✅ heuristic 2026-11-07 |
+| Sibling: auth (shared session or handoff) | Not started |
 
 ### Phase 2 — Extraction salvage
 
@@ -89,5 +89,5 @@ Geo place pick · recipe shopping · field-level review UI · native App Store c
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [###############_____] ~72% -> Bound-place picker + mapper shell
+chatiq-locations: sibling v1: [#################___] ~85% -> Vision extract + LLM normalize + auth
 ```

@@ -1,0 +1,542 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
+
+import {
+  addMapperItem,
+  applyMapperText,
+  fetchZoneInventory,
+  refreshMapperZones,
+  type MapperPose,
+} from "./actions";
+import type { ZoneListRow } from "@/lib/supabase/store";
+
+type SpeechRec = {
+  lang: string;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  start: () => void;
+};
+
+type Props = {
+  placeId: string;
+  placeName: string;
+  placeAddress: string | null;
+  initialZones: ZoneListRow[];
+  layoutVersionId: string | null;
+};
+
+function cardinal(deg: number | null): string {
+  if (deg == null || Number.isNaN(deg)) return "—";
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const i = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
+  return dirs[i];
+}
+
+export function MapperClient(props: Props) {
+  const [zones, setZones] = useState(props.initialZones);
+  const [text, setText] = useState("");
+  const [stickyType, setStickyType] = useState("aisle");
+  const [stickyLabel, setStickyLabel] = useState("");
+  const [heading, setHeading] = useState<number | null>(null);
+  const [coords, setCoords] = useState<{
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+  } | null>(null);
+  const [poseError, setPoseError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [inspectId, setInspectId] = useState<string | null>(null);
+  const [inspectItems, setInspectItems] = useState<
+    Array<{ canonical_name?: string; raw_label?: string | null }>
+  >([]);
+  const [addItemName, setAddItemName] = useState("");
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [listening, setListening] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const pose: MapperPose = useMemo(
+    () => ({
+      heading_deg: heading,
+      latitude: coords?.lat ?? null,
+      longitude: coords?.lng ?? null,
+      accuracy_m: coords?.accuracy ?? null,
+    }),
+    [heading, coords]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
+      return;
+    }
+    const onOrient = (e: DeviceOrientationEvent) => {
+      // webkitCompassHeading (iOS) or alpha
+      const wk = (e as DeviceOrientationEvent & { webkitCompassHeading?: number })
+        .webkitCompassHeading;
+      if (typeof wk === "number") {
+        setHeading(wk);
+        return;
+      }
+      if (typeof e.alpha === "number") {
+        setHeading((360 - e.alpha + 360) % 360);
+      }
+    };
+    window.addEventListener("deviceorientation", onOrient);
+    return () => window.removeEventListener("deviceorientation", onOrient);
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setPoseError("Geolocation unavailable");
+      return;
+    }
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        setCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? null,
+        });
+        setPoseError(null);
+      },
+      (err) => setPoseError(err.message),
+      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  const stickyReady = Boolean(stickyLabel.trim());
+
+  const submitText = useCallback(() => {
+    const value = text.trim();
+    if (!value) {
+      setError("Type or speak something first");
+      return;
+    }
+    setError(null);
+    setStatus(null);
+    startTransition(async () => {
+      const res = await applyMapperText({
+        place_id: props.placeId,
+        text: value,
+        sticky_zone_type: stickyReady ? stickyType : null,
+        sticky_zone_label: stickyReady ? stickyLabel.trim() : null,
+        publish: true,
+        pose,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setStickyType(res.zone.zone_type);
+      setStickyLabel(res.zone.zone_label);
+      setText("");
+      setStatus(
+        `Saved ${res.zone.zone_type} ${res.zone.zone_label}` +
+          (res.items_added ? ` · ${res.items_added} item(s)` : "") +
+          (res.published ? " · published" : "")
+      );
+      setInspectId(res.zone.id);
+    });
+  }, [text, stickyReady, stickyType, stickyLabel, pose, props.placeId]);
+
+  useEffect(() => {
+    if (!inspectId) {
+      setInspectItems([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const res = await fetchZoneInventory(inspectId);
+      if (cancelled) return;
+      if (res.ok) setInspectItems(res.items);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inspectId, zones]);
+
+  function startSpeech() {
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRec;
+      webkitSpeechRecognition?: new () => SpeechRec;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
+      setError("Speech recognition not supported in this browser");
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = false;
+    rec.onstart = () => setListening(true);
+    rec.onend = () => setListening(false);
+    rec.onerror = () => {
+      setListening(false);
+      setError("Speech failed");
+    };
+    rec.onresult = (ev) => {
+      const said = ev.results[0]?.[0]?.transcript?.trim();
+      if (said) setText((prev) => (prev ? `${prev} ${said}` : said));
+    };
+    rec.start();
+  }
+
+  function onPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    setPhotos((prev) => [...prev, ...Array.from(files)].slice(0, 12));
+  }
+
+  function processPhotos() {
+    if (!photos.length) {
+      setError("Add at least one photo");
+      return;
+    }
+    if (!stickyReady && !text.trim()) {
+      setError("Set sticky zone (e.g. aisle 9) or include zone in text before processing photos");
+      return;
+    }
+    setError(null);
+    setStatus(
+      `Queued ${photos.length} photo(s) for ${stickyType} ${stickyLabel || "(from text)"}. Vision extract is next — use text for items for now.`
+    );
+    // Keep files visible; clear when vision lands
+  }
+
+  function onAddItem() {
+    if (!inspectId || !addItemName.trim()) return;
+    startTransition(async () => {
+      const res = await addMapperItem({
+        place_id: props.placeId,
+        zone_id: inspectId,
+        item_name: addItemName,
+        publish: true,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setAddItemName("");
+      setStatus(`Added item · zone now ${res.item_count} row(s)`);
+      const inv = await fetchZoneInventory(inspectId);
+      if (inv.ok) setInspectItems(inv.items);
+    });
+  }
+
+  async function reloadZones() {
+    const res = await refreshMapperZones(props.placeId);
+    if (res.ok) setZones(res.zones);
+  }
+
+  const inspectZone = zones.find((z) => z.id === inspectId) || null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <header>
+        <p style={eyebrow}>Store mapper</p>
+        <h1 style={{ margin: "0 0 4px", fontSize: "1.6rem" }}>{props.placeName}</h1>
+        {props.placeAddress ? (
+          <p style={{ margin: 0, color: "#666", fontSize: 14 }}>{props.placeAddress}</p>
+        ) : null}
+      </header>
+
+      <section style={card}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div
+            aria-hidden
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              border: "2px solid #111",
+              position: "relative",
+              flexShrink: 0,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 4,
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              N
+            </span>
+            <span
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: 3,
+                height: 28,
+                marginLeft: -1.5,
+                marginTop: -28,
+                background: "#c62828",
+                transformOrigin: "bottom center",
+                transform: `rotate(${heading ?? 0}deg)`,
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            <div>
+              <strong>{cardinal(heading)}</strong>
+              {heading != null ? ` · ${Math.round(heading)}°` : " · compass pending"}
+            </div>
+            <div style={{ color: "#555" }}>
+              {coords
+                ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` +
+                  (coords.accuracy != null
+                    ? ` ±${Math.round(coords.accuracy)}m`
+                    : "")
+                : poseError || "Waiting for GPS…"}
+            </div>
+            <div style={{ color: "#888", fontSize: 12 }}>
+              Optional — capture never blocked if missing
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style={card}>
+        <label style={label}>Sticky zone</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            value={stickyType}
+            onChange={(e) => setStickyType(e.target.value)}
+            style={input}
+          >
+            <option value="aisle">aisle</option>
+            <option value="section">section</option>
+            <option value="shelf">shelf</option>
+          </select>
+          <input
+            value={stickyLabel}
+            onChange={(e) => setStickyLabel(e.target.value)}
+            placeholder="9 or Frozen foods"
+            style={{ ...input, flex: 1 }}
+          />
+        </div>
+        <p style={hint}>
+          Set once, then snap or say items. Text can also include the zone
+          (“aisle 9. cereal, peanut butter”).
+        </p>
+      </section>
+
+      <section style={card}>
+        <label style={label}>Text / speak</label>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+          placeholder="aisle 9. cereal, peanut butter, jelly"
+          style={{ ...input, resize: "vertical", width: "100%" }}
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          <button type="button" onClick={submitText} disabled={pending} style={primaryBtn}>
+            {pending ? "Saving…" : "Save & publish"}
+          </button>
+          <button type="button" onClick={startSpeech} style={secondaryBtn}>
+            {listening ? "Listening…" : "Speak"}
+          </button>
+        </div>
+      </section>
+
+      <section style={card}>
+        <label style={label}>Photos (batch)</label>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          onChange={(e) => {
+            onPhotos(e.target.files);
+            e.target.value = "";
+          }}
+          style={{ fontSize: 14 }}
+        />
+        {photos.length > 0 ? (
+          <p style={hint}>{photos.length} photo(s) ready</p>
+        ) : (
+          <p style={hint}>Vision extract lands next — queue is ready.</p>
+        )}
+        <button
+          type="button"
+          onClick={processPhotos}
+          style={{ ...secondaryBtn, marginTop: 8 }}
+        >
+          Process photos
+        </button>
+      </section>
+
+      {error ? <p style={{ color: "#b71c1c", margin: 0 }}>{error}</p> : null}
+      {status ? <p style={{ color: "#1b5e20", margin: 0 }}>{status}</p> : null}
+
+      <section style={card}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <label style={{ ...label, marginBottom: 0 }}>Zones</label>
+          <button type="button" onClick={() => void reloadZones()} style={linkBtn}>
+            Refresh
+          </button>
+        </div>
+        {zones.length === 0 ? (
+          <p style={hint}>No zones yet — save your first aisle.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {zones.map((z) => (
+              <li key={z.id}>
+                <button
+                  type="button"
+                  onClick={() => setInspectId(z.id)}
+                  style={{
+                    ...zoneRow,
+                    background: inspectId === z.id ? "#eef3ff" : "transparent",
+                  }}
+                >
+                  <span>
+                    {z.zone_type} {z.zone_label}
+                  </span>
+                  <span style={{ color: "#666" }}>{z.item_count} items</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {inspectZone ? (
+        <section style={card}>
+          <h2 style={{ margin: "0 0 8px", fontSize: "1.1rem" }}>
+            Inspect · {inspectZone.zone_type} {inspectZone.zone_label}
+          </h2>
+          <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 14 }}>
+            {inspectItems.length === 0 ? (
+              <li style={{ color: "#666" }}>No draft items yet</li>
+            ) : (
+              inspectItems.slice(0, 40).map((it, i) => (
+                <li key={`${it.canonical_name}-${i}`}>
+                  {it.canonical_name || it.raw_label}
+                </li>
+              ))
+            )}
+          </ul>
+          {inspectItems.length > 40 ? (
+            <p style={hint}>Showing first 40…</p>
+          ) : null}
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={addItemName}
+              onChange={(e) => setAddItemName(e.target.value)}
+              placeholder="Add one item"
+              style={{ ...input, flex: 1 }}
+            />
+            <button type="button" onClick={onAddItem} disabled={pending} style={primaryBtn}>
+              Add
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+const eyebrow: CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "#888",
+};
+
+const card: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e5e5",
+  borderRadius: 12,
+  padding: 14,
+};
+
+const label: CSSProperties = {
+  display: "block",
+  fontSize: 13,
+  fontWeight: 600,
+  marginBottom: 6,
+};
+
+const hint: CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: 12,
+  color: "#777",
+};
+
+const input: CSSProperties = {
+  fontSize: 16,
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  background: "#fff",
+};
+
+const primaryBtn: CSSProperties = {
+  fontSize: 15,
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "none",
+  background: "#111",
+  color: "#fff",
+  fontWeight: 600,
+};
+
+const secondaryBtn: CSSProperties = {
+  fontSize: 15,
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  background: "#fff",
+  color: "#111",
+};
+
+const linkBtn: CSSProperties = {
+  border: "none",
+  background: "none",
+  color: "#0b5fff",
+  fontSize: 13,
+  padding: 0,
+};
+
+const zoneRow: CSSProperties = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "space-between",
+  padding: "10px 8px",
+  border: "none",
+  borderBottom: "1px solid #eee",
+  background: "transparent",
+  textAlign: "left",
+  fontSize: 14,
+};

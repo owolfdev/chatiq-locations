@@ -723,6 +723,64 @@ export async function publishZone(input: {
   };
 }
 
+export type ZoneListRow = ZoneRow & {
+  item_count: number;
+};
+
+export async function listZonesForPlace(place_id: string): Promise<{
+  layout_version_id: string | null;
+  zones: ZoneListRow[];
+}> {
+  const supabase = client();
+  const { data: layout } = await supabase
+    .from(LOCATIONS_TABLES.placeLayoutVersions)
+    .select("id")
+    .eq("place_id", place_id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!layout?.id) {
+    return { layout_version_id: null, zones: [] };
+  }
+
+  const { data: zones, error } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select(
+      "id, team_id, place_id, layout_version_id, zone_type, zone_label, zone_description, near_landmark, placement_note, is_active"
+    )
+    .eq("layout_version_id", layout.id)
+    .eq("is_active", true)
+    .order("zone_type")
+    .order("zone_label");
+  if (error) {
+    throw new LocationsStoreError(error.message, "ZONES_LIST_FAILED");
+  }
+
+  const rows: ZoneListRow[] = [];
+  for (const z of (zones || []) as ZoneRow[]) {
+    const { count } = await supabase
+      .from(LOCATIONS_TABLES.zoneItems)
+      .select("id", { count: "exact", head: true })
+      .eq("zone_id", z.id);
+    rows.push({ ...z, item_count: count || 0 });
+  }
+  return { layout_version_id: layout.id as string, zones: rows };
+}
+
+export async function listZoneItems(zone_id: string): Promise<ZoneItemInput[]> {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.zoneItems)
+    .select(
+      "canonical_name, raw_label, brand, variant, size_text, category_labels, shelf_hint"
+    )
+    .eq("zone_id", zone_id)
+    .order("canonical_name");
+  if (error) {
+    throw new LocationsStoreError(error.message, "ZONE_ITEMS_GET_FAILED");
+  }
+  return (data || []) as ZoneItemInput[];
+}
+
 export async function getPlaceContext(place_id: string): Promise<{
   place: PlaceRow;
   layout_version_id: string | null;

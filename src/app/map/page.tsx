@@ -1,43 +1,56 @@
-import Link from "next/link";
+import { MapperClient } from "./mapper-client";
+import { getPlace, listZonesForPlace } from "@/lib/supabase/store";
 
 type Props = {
   searchParams: Promise<{ place_id?: string }>;
 };
 
-/**
- * Placeholder mapper shell — full capture UI lands in Phase 1b.
- * ChatIQ "Open store mapper" deep-links here with ?place_id=.
- */
-export default async function MapPlaceholderPage({ searchParams }: Props) {
+export default async function MapPage({ searchParams }: Props) {
   const params = await searchParams;
   const placeId = params.place_id?.trim() || null;
 
-  return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-4 px-6 py-16">
-      <p className="text-sm uppercase tracking-wide text-zinc-500">
-        chatiq-locations
-      </p>
-      <h1 className="text-3xl font-semibold tracking-tight">Store mapper</h1>
-      <p className="text-sm text-zinc-600">
-        Capture UI (text / camera / compass) is next. This page confirms the
-        ChatIQ → sibling handoff.
-      </p>
-      {placeId ? (
-        <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs text-zinc-800">
-          place_id={placeId}
+  if (!placeId) {
+    return (
+      <main style={{ padding: "2rem", maxWidth: 480, margin: "0 auto" }}>
+        <h1 style={{ fontSize: "1.5rem" }}>Store mapper</h1>
+        <p style={{ color: "#666" }}>
+          Open this page from ChatIQ with a bound place (
+          <code>?place_id=…</code>), or add the id to the URL.
         </p>
-      ) : (
-        <p className="text-sm text-amber-700">
-          No place_id in the URL. Bind a place on the bot in ChatIQ, then open
-          the mapper again.
-        </p>
-      )}
-      <Link
-        href="/api/health"
-        className="text-sm text-zinc-500 underline underline-offset-2"
+      </main>
+    );
+  }
+
+  try {
+    const place = await getPlace(placeId);
+    const { zones, layout_version_id } = await listZonesForPlace(placeId);
+
+    return (
+      <main
+        style={{
+          padding: "1.25rem",
+          maxWidth: 520,
+          margin: "0 auto",
+          paddingBottom: "3rem",
+        }}
       >
-        Health check
-      </Link>
-    </main>
-  );
+        <MapperClient
+          placeId={place.id}
+          placeName={place.name}
+          placeAddress={place.address}
+          initialZones={zones}
+          layoutVersionId={layout_version_id}
+        />
+      </main>
+    );
+  } catch (e) {
+    return (
+      <main style={{ padding: "2rem", maxWidth: 480, margin: "0 auto" }}>
+        <h1 style={{ fontSize: "1.5rem" }}>Store mapper</h1>
+        <p style={{ color: "#b71c1c" }}>
+          {e instanceof Error ? e.message : "Failed to load place"}
+        </p>
+      </main>
+    );
+  }
 }

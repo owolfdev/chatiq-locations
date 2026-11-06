@@ -95,6 +95,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-07 — Mapper shell v1 (text / speak / compass)
+
+**What changed:** `/map?place_id=` phone UI — sticky zone, text+speak ingest (heuristic normalize → upsert items → publish), compass/GPS readout, zone list + inspect/add item, photo batch queue (vision TBD).
+
+**Next:** Deploy; LLM normalize; vision extract on photo batch; mapper auth/handoff.
+
+```text
+chatiq-locations: [#################___] ~85% -> Vision + LLM normalize
+```
+
 ### 2026-11-07 — Bound-place picker + mapper handoff
 
 **What changed:** Sibling commands `places.list_for_team` + `place.bind_bot`; ChatIQ bot Settings bound-place dropdown + Open store mapper → `/map?place_id=`; sibling `/map` placeholder page.
