@@ -63,10 +63,11 @@ export function MapperClient(props: Props) {
     Array<{ canonical_name?: string; raw_label?: string | null }>
   >([]);
   const [addItemName, setAddItemName] = useState("");
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
   const [listening, setListening] = useState(false);
   const [pending, startTransition] = useTransition();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
 
   const pose: MapperPose = useMemo(
     () => ({
@@ -198,23 +199,40 @@ export function MapperClient(props: Props) {
 
   function onPhotos(files: FileList | null) {
     if (!files?.length) return;
-    setPhotos((prev) => [...prev, ...Array.from(files)].slice(0, 12));
+    const next = Array.from(files).map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }));
+    setPhotos((prev) => {
+      const merged = [...prev, ...next].slice(0, 12);
+      // revoke previews that were dropped
+      for (const p of prev) {
+        if (!merged.includes(p)) URL.revokeObjectURL(p.url);
+      }
+      return merged;
+    });
+  }
+
+  function clearPhotos() {
+    for (const p of photos) URL.revokeObjectURL(p.url);
+    setPhotos([]);
   }
 
   function processPhotos() {
     if (!photos.length) {
-      setError("Add at least one photo");
+      setError("Take or add at least one photo");
       return;
     }
     if (!stickyReady && !text.trim()) {
-      setError("Set sticky zone (e.g. aisle 9) or include zone in text before processing photos");
+      setError(
+        "Set sticky zone (e.g. aisle 9) or include zone in text before processing photos"
+      );
       return;
     }
     setError(null);
     setStatus(
       `Queued ${photos.length} photo(s) for ${stickyType} ${stickyLabel || "(from text)"}. Vision extract is next — use text for items for now.`
     );
-    // Keep files visible; clear when vision lands
   }
 
   function onAddItem() {
@@ -361,31 +379,96 @@ export function MapperClient(props: Props) {
       </section>
 
       <section style={card}>
-        <label style={label}>Photos (batch)</label>
+        <label style={label}>Camera</label>
+        <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
+          On a phone, <strong>Take photo</strong> opens the camera. Add several
+          shots of the same zone, then process as a batch.
+        </p>
+        {/* Hidden inputs: capture forces camera on mobile; library allows multi-pick */}
         <input
-          ref={fileRef}
+          ref={cameraRef}
           type="file"
           accept="image/*"
           capture="environment"
+          onChange={(e) => {
+            onPhotos(e.target.files);
+            e.target.value = "";
+          }}
+          style={{ display: "none" }}
+        />
+        <input
+          ref={libraryRef}
+          type="file"
+          accept="image/*"
           multiple
           onChange={(e) => {
             onPhotos(e.target.files);
             e.target.value = "";
           }}
-          style={{ fontSize: 14 }}
+          style={{ display: "none" }}
         />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            style={primaryBtn}
+          >
+            Take photo
+          </button>
+          <button
+            type="button"
+            onClick={() => libraryRef.current?.click()}
+            style={secondaryBtn}
+          >
+            Add from library
+          </button>
+          {photos.length > 0 ? (
+            <button type="button" onClick={clearPhotos} style={secondaryBtn}>
+              Clear
+            </button>
+          ) : null}
+        </div>
         {photos.length > 0 ? (
-          <p style={hint}>{photos.length} photo(s) ready</p>
+          <>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              {photos.map((p) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={p.url}
+                  src={p.url}
+                  alt=""
+                  style={{
+                    width: "100%",
+                    aspectRatio: "1",
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid #e5e5e5",
+                  }}
+                />
+              ))}
+            </div>
+            <p style={hint}>{photos.length} photo(s) ready</p>
+            <button
+              type="button"
+              onClick={processPhotos}
+              style={{ ...secondaryBtn, marginTop: 8 }}
+            >
+              Process photos
+            </button>
+          </>
         ) : (
-          <p style={hint}>Vision extract lands next — queue is ready.</p>
+          <p style={hint}>
+            Vision extract comes next — queue + thumbnails work now; items still
+            via text until then.
+          </p>
         )}
-        <button
-          type="button"
-          onClick={processPhotos}
-          style={{ ...secondaryBtn, marginTop: 8 }}
-        >
-          Process photos
-        </button>
       </section>
 
       {error ? <p style={{ color: "#b71c1c", margin: 0 }}>{error}</p> : null}
