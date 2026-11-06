@@ -31,3 +31,4 @@ yarn-error.log*
 
 # Large local examination dumps (re-export via scripts/export-bangkapi-exam.mts)
 dev_docs/examination/**/bundle.json
+dev_docs/examination/**/published-item-index.json
