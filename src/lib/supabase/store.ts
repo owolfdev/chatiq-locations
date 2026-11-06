@@ -706,18 +706,53 @@ function editDistance(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
+/** Last-token fallback ignores these — "paper products" must not hit "tomato products". */
+const GENERIC_QUERY_TOKENS = new Set([
+  "products",
+  "product",
+  "items",
+  "item",
+  "goods",
+  "stuff",
+  "things",
+  "section",
+  "aisle",
+  "shelf",
+  "brand",
+  "brands",
+]);
+
+function hasWholeToken(hay: string, token: string): boolean {
+  const re = new RegExp(`(?:^|\\s)${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`);
+  return re.test(hay);
+}
+
 function textMatchesQuery(haystack: string, query: string): boolean {
   const hay = normalizeSearchText(haystack);
   const q = normalizeSearchText(query);
   if (!hay || !q) return false;
-  if (hay.includes(q) || q.includes(hay)) return true;
+  // Query contains full item name ("scott toilet tissue" ⊇ "scott")
+  if (q.includes(hay) && hay.length >= 3) return true;
+  // Multi-word phrase substring, or single-token whole word (scott ≠ scottish)
+  if (q.includes(" ")) {
+    if (hay.includes(q)) return true;
+  } else if (hasWholeToken(hay, q)) {
+    return true;
+  }
   const tokens = queryTokens(q);
   if (tokens.length === 0) return false;
-  if (tokens.length === 1) return hay.includes(tokens[0]);
+  // Single token: whole-word only
+  if (tokens.length === 1) return hasWholeToken(hay, tokens[0]);
   // All tokens, or last token as primary noun when distinctive (≥6): "breakfast cereal"
   if (tokens.every((t) => hay.includes(t))) return true;
   const primary = tokens[tokens.length - 1];
-  return primary.length >= 6 && hay.includes(primary);
+  if (GENERIC_QUERY_TOKENS.has(primary)) {
+    const distinctive = tokens.filter((t) => !GENERIC_QUERY_TOKENS.has(t));
+    return (
+      distinctive.length > 0 && distinctive.every((t) => hay.includes(t))
+    );
+  }
+  return primary.length >= 6 && hasWholeToken(hay, primary);
 }
 
 /** Softer match for zone labels (e.g. "deli meat" → Delicatessen, "friut" → Fruit). */
@@ -812,7 +847,16 @@ export async function resolveItem(input: {
     if (/^aisle\b/i.test(label)) return label;
     if (type === "aisle") return `Aisle ${label}`;
     if (type === "section") return `${label} section`;
+    if (type === "shelf") return `${label} shelf`;
     return `${type} ${label}`.trim();
+  }
+
+  function matchRank(zoneType: string): number {
+    const t = zoneType.trim().toLowerCase();
+    if (t === "aisle") return 0;
+    if (t === "section") return 1;
+    if (t === "shelf") return 2;
+    return 3;
   }
   const zoneMatches: Match[] = [];
   const itemMatches: Match[] = [];
@@ -876,7 +920,27 @@ export async function resolveItem(input: {
     }
   }
 
-  return { matches: [...zoneMatches, ...itemMatches] };
+  let matches = [...zoneMatches, ...itemMatches];
+
+  // Prefer multi-token hits: "Scott toilet" keeps Scott TP, drops "Duck toilet cleaner"
+  const distinctive = queryTokens(query).filter(
+    (t) => !GENERIC_QUERY_TOKENS.has(t)
+  );
+  if (distinctive.length >= 2) {
+    const score = (name: string) => {
+      const hay = normalizeSearchText(name);
+      return distinctive.filter((t) => hasWholeToken(hay, t) || hay.includes(t))
+        .length;
+    };
+    const scored = matches.map((m) => ({ m, n: score(m.matched_name) }));
+    const best = scored.reduce((max, s) => Math.max(max, s.n), 0);
+    if (best >= 2) {
+      matches = scored.filter((s) => s.n >= 2).map((s) => s.m);
+    }
+  }
+
+  matches.sort((a, b) => matchRank(a.zone_type) - matchRank(b.zone_type));
+  return { matches };
 }
 
 export async function getPlaceMap(place_id: string): Promise<{

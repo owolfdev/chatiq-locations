@@ -93,6 +93,18 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-06 — Villa bind + resolve matcher
+
+**What changed:** Grocery bot unbound from Fuji/Gourmet (was answering Fuji “Paper Products” shelf); bound **Villa Market Thong Lo** only. Resolve matcher: whole-word tokens (scott≠scottish), generic last-token guard (`paper products`≠tomato products), aisle-first match rank, shelf `where` phrasing.
+
+**Verified locally:** `toilet paper` → Aisle 6 + Household section; `paper products` hits paper goods not tomato/hair “products”; `Scott` no longer Scottish salmon.
+
+**Next:** Commit/push → Vercel; chat smoke toilet paper / paper products → numbered aisles.
+
+```text
+chatiq-locations: [##############______] ~70% -> Live aisle smoke after deploy
+```
+
 ### 2026-11-06 — ChatIQ sibling wire + Vercel
 
 **What changed:** Production deploy health green. ChatIQ loads places from sibling when gated; item lookups call `map.resolve_item` and return aisle answers (skips in-process place concierge/recipe when sibling on).
