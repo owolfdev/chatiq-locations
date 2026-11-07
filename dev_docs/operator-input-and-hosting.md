@@ -74,9 +74,11 @@ One primary screen for phone walkers:
 
 ### Capture patterns (all valid)
 
-1. Type/speak: “this is aisle 9. cereal, peanut butter, …”  
+1. Type/speak: “this is aisle 9. cereal, peanut butter, …” (**Add to zone** or **Replace all items**)  
 2. Set sticky zone “aisle 9” → snap one or more shelves → batch process  
-3. Open Frozen foods → add a single SKU  
+3. Open a zone → **add** one SKU, **remove** one SKU, or **Clear all**  
+
+Remaps: replace/clear publish immediately so shopper answers stay honest.
 
 ### Layout / relative position (light, not CAD)
 
@@ -100,6 +102,10 @@ Re-shoot beats archiving every pass.
 1. Bot settings: keep `locations_mode`  
 2. **Bound place** dropdown of team places → write sibling bind (`primary_bot_id` + `place_bots`)  
 3. Link **Open store mapper** → sibling with place/team context  
+
+## Vision extract (next build)
+
+See [`vision-extract-next.md`](./vision-extract-next.md): port archived OpenAI `gpt-5-mini` extract into sibling; Process photos → Text/speak draft → Add/Replace. Not Google-first.
 
 ## Out of scope here
 

@@ -2,14 +2,17 @@
 
 import { normalizeIngestText } from "@/lib/ingest/normalize-text";
 import {
+  clearZoneItems,
   ensureActiveLayout,
   getPlace,
   listZoneItems,
   listZonesForPlace,
   publishZone,
+  removeZoneItem,
   setZoneItems,
   upsertZone,
   type ZoneItemInput,
+  type ZoneItemRow,
   type ZoneListRow,
 } from "@/lib/supabase/store";
 
@@ -62,7 +65,7 @@ export async function refreshMapperZones(place_id: string): Promise<{
 
 export async function fetchZoneInventory(zone_id: string): Promise<{
   ok: true;
-  items: ZoneItemInput[];
+  items: ZoneItemRow[];
 } | { ok: false; error: string }> {
   try {
     const items = await listZoneItems(zone_id);
@@ -80,6 +83,8 @@ export async function applyMapperText(input: {
   text: string;
   sticky_zone_type?: string | null;
   sticky_zone_label?: string | null;
+  /** append (default) or replace all items in the target zone */
+  mode?: "append" | "replace";
   publish?: boolean;
   pose?: MapperPose | null;
 }): Promise<ApplyTextResult> {
@@ -123,8 +128,9 @@ export async function applyMapperText(input: {
       placement_note: placement_note || null,
     });
 
+    const mode = input.mode === "replace" ? "replace" : "append";
     const items_added = normalized.items.length;
-    if (items_added > 0) {
+    if (mode === "replace" || items_added > 0) {
       const items: ZoneItemInput[] = normalized.items.map((name) => ({
         canonical_name: name,
         raw_label: name,
@@ -133,12 +139,15 @@ export async function applyMapperText(input: {
         team_id: place.team_id,
         zone_id: zone.id,
         items,
-        mode: "append",
+        mode,
       });
     }
 
     let published = false;
-    if (input.publish !== false && (normalized.items.length > 0 || placement_note)) {
+    if (
+      input.publish !== false &&
+      (mode === "replace" || normalized.items.length > 0 || placement_note)
+    ) {
       await publishZone({ team_id: place.team_id, zone_id: zone.id });
       published = true;
     }
@@ -192,6 +201,65 @@ export async function addMapperItem(input: {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Add item failed",
+    };
+  }
+}
+
+export async function removeMapperItem(input: {
+  place_id: string;
+  zone_id: string;
+  item_id: string;
+  publish?: boolean;
+}): Promise<
+  | { ok: true; item_count: number; zones: ZoneListRow[]; items: ZoneItemRow[] }
+  | { ok: false; error: string }
+> {
+  try {
+    const place = await getPlace(input.place_id);
+    const result = await removeZoneItem({
+      team_id: place.team_id,
+      zone_id: input.zone_id,
+      item_id: input.item_id,
+    });
+    if (input.publish !== false) {
+      await publishZone({ team_id: place.team_id, zone_id: input.zone_id });
+    }
+    const [{ zones }, items] = await Promise.all([
+      listZonesForPlace(input.place_id),
+      listZoneItems(input.zone_id),
+    ]);
+    return { ok: true, item_count: result.item_count, zones, items };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Remove item failed",
+    };
+  }
+}
+
+export async function clearMapperZoneItems(input: {
+  place_id: string;
+  zone_id: string;
+  publish?: boolean;
+}): Promise<
+  | { ok: true; item_count: number; zones: ZoneListRow[] }
+  | { ok: false; error: string }
+> {
+  try {
+    const place = await getPlace(input.place_id);
+    const result = await clearZoneItems({
+      team_id: place.team_id,
+      zone_id: input.zone_id,
+    });
+    if (input.publish !== false) {
+      await publishZone({ team_id: place.team_id, zone_id: input.zone_id });
+    }
+    const { zones } = await listZonesForPlace(input.place_id);
+    return { ok: true, item_count: result.item_count, zones };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Clear zone failed",
     };
   }
 }

@@ -21,9 +21,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-07):** Implement ChatIQ **bound place** picker + “Open store mapper” link; scaffold sibling mapper shell (text/image/compass) per [`operator-input-and-hosting.md`](./operator-input-and-hosting.md).
+**Next action (2026-11-08):** **Vision extract in sibling** — port archived OpenAI `extract-zone-scan` → Process photos fills Text/speak draft → Add/Replace. Spec: [`vision-extract-next.md`](./vision-extract-next.md).
 
-ChatIQ env: `LOCATIONS_RUNTIME=sibling`, `LOCATIONS_SIBLING_URL`, matching token, optional `LOCATIONS_SIBLING_BOT_IDS`.
+Mapper shell + bound-place picker + add/remove/replace are shipped (needs deploy for latest). ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token. Sibling needs `OPENAI_API_KEY` for vision.
 
 ## Decisions (locked)
 
@@ -94,6 +94,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-07 — Zone item add / remove / replace + vision next-doc
+
+**What changed:** Mapper Add / Remove / Clear all / Replace-all text mode; [`vision-extract-next.md`](./vision-extract-next.md) locked (OpenAI port from archived extract, draft → Text/speak).
+
+**Next:** Implement vision extract per that doc.
+
+```text
+chatiq-locations: [#################___] ~86% -> Vision extract
+```
 
 ### 2026-11-07 — Mapper shell v1 (text / speak / compass)
 

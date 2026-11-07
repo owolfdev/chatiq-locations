@@ -13,11 +13,13 @@ import {
 import {
   addMapperItem,
   applyMapperText,
+  clearMapperZoneItems,
   fetchZoneInventory,
   refreshMapperZones,
+  removeMapperItem,
   type MapperPose,
 } from "./actions";
-import type { ZoneListRow } from "@/lib/supabase/store";
+import type { ZoneItemRow, ZoneListRow } from "@/lib/supabase/store";
 
 type SpeechRec = {
   lang: string;
@@ -59,10 +61,9 @@ export function MapperClient(props: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
-  const [inspectItems, setInspectItems] = useState<
-    Array<{ canonical_name?: string; raw_label?: string | null }>
-  >([]);
+  const [inspectItems, setInspectItems] = useState<ZoneItemRow[]>([]);
   const [addItemName, setAddItemName] = useState("");
+  const [saveMode, setSaveMode] = useState<"append" | "replace">("append");
   const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
   const [listening, setListening] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -135,6 +136,7 @@ export function MapperClient(props: Props) {
         text: value,
         sticky_zone_type: stickyReady ? stickyType : null,
         sticky_zone_label: stickyReady ? stickyLabel.trim() : null,
+        mode: saveMode,
         publish: true,
         pose,
       });
@@ -147,13 +149,21 @@ export function MapperClient(props: Props) {
       setStickyLabel(res.zone.zone_label);
       setText("");
       setStatus(
-        `Saved ${res.zone.zone_type} ${res.zone.zone_label}` +
+        `${saveMode === "replace" ? "Replaced" : "Saved"} ${res.zone.zone_type} ${res.zone.zone_label}` +
           (res.items_added ? ` · ${res.items_added} item(s)` : "") +
           (res.published ? " · published" : "")
       );
       setInspectId(res.zone.id);
     });
-  }, [text, stickyReady, stickyType, stickyLabel, pose, props.placeId]);
+  }, [
+    text,
+    stickyReady,
+    stickyType,
+    stickyLabel,
+    saveMode,
+    pose,
+    props.placeId,
+  ]);
 
   useEffect(() => {
     if (!inspectId) {
@@ -253,6 +263,51 @@ export function MapperClient(props: Props) {
       setStatus(`Added item · zone now ${res.item_count} row(s)`);
       const inv = await fetchZoneInventory(inspectId);
       if (inv.ok) setInspectItems(inv.items);
+    });
+  }
+
+  function onRemoveItem(itemId: string, name: string) {
+    if (!inspectId) return;
+    if (!window.confirm(`Remove “${name}” from this zone?`)) return;
+    startTransition(async () => {
+      const res = await removeMapperItem({
+        place_id: props.placeId,
+        zone_id: inspectId,
+        item_id: itemId,
+        publish: true,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setInspectItems(res.items);
+      setStatus(`Removed “${name}” · ${res.item_count} left`);
+    });
+  }
+
+  function onClearZone() {
+    if (!inspectId || !inspectZone) return;
+    if (
+      !window.confirm(
+        `Clear ALL items from ${inspectZone.zone_type} ${inspectZone.zone_label}? This publishes an empty zone.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await clearMapperZoneItems({
+        place_id: props.placeId,
+        zone_id: inspectId,
+        publish: true,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setInspectItems([]);
+      setStatus(`Cleared ${inspectZone.zone_type} ${inspectZone.zone_label}`);
     });
   }
 
@@ -368,9 +423,42 @@ export function MapperClient(props: Props) {
           placeholder="aisle 9. cereal, peanut butter, jelly"
           style={{ ...input, resize: "vertical", width: "100%" }}
         />
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            marginTop: 8,
+            fontSize: 13,
+            alignItems: "center",
+          }}
+        >
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="radio"
+              name="saveMode"
+              checked={saveMode === "append"}
+              onChange={() => setSaveMode("append")}
+            />
+            Add to zone
+          </label>
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="radio"
+              name="saveMode"
+              checked={saveMode === "replace"}
+              onChange={() => setSaveMode("replace")}
+            />
+            Replace all items in zone
+          </label>
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           <button type="button" onClick={submitText} disabled={pending} style={primaryBtn}>
-            {pending ? "Saving…" : "Save & publish"}
+            {pending
+              ? "Saving…"
+              : saveMode === "replace"
+                ? "Replace & publish"
+                : "Add & publish"}
           </button>
           <button type="button" onClick={startSpeech} style={secondaryBtn}>
             {listening ? "Listening…" : "Speak"}
@@ -515,22 +603,61 @@ export function MapperClient(props: Props) {
 
       {inspectZone ? (
         <section style={card}>
-          <h2 style={{ margin: "0 0 8px", fontSize: "1.1rem" }}>
-            Inspect · {inspectZone.zone_type} {inspectZone.zone_label}
-          </h2>
-          <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 14 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: "1.1rem" }}>
+              Inspect · {inspectZone.zone_type} {inspectZone.zone_label}
+            </h2>
+            <button
+              type="button"
+              onClick={onClearZone}
+              disabled={pending || inspectItems.length === 0}
+              style={{ ...secondaryBtn, color: "#b71c1c", borderColor: "#ef9a9a" }}
+            >
+              Clear all
+            </button>
+          </div>
+          <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, fontSize: 14 }}>
             {inspectItems.length === 0 ? (
-              <li style={{ color: "#666" }}>No draft items yet</li>
+              <li style={{ color: "#666", padding: "6px 0" }}>No items yet</li>
             ) : (
-              inspectItems.slice(0, 40).map((it, i) => (
-                <li key={`${it.canonical_name}-${i}`}>
-                  {it.canonical_name || it.raw_label}
-                </li>
-              ))
+              inspectItems.slice(0, 80).map((it) => {
+                const name = it.canonical_name || it.raw_label || "item";
+                return (
+                  <li
+                    key={it.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 0",
+                      borderBottom: "1px solid #eee",
+                    }}
+                  >
+                    <span>{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveItem(it.id, name)}
+                      disabled={pending}
+                      style={linkBtn}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                );
+              })
             )}
           </ul>
-          {inspectItems.length > 40 ? (
-            <p style={hint}>Showing first 40…</p>
+          {inspectItems.length > 80 ? (
+            <p style={hint}>Showing first 80…</p>
           ) : null}
           <div style={{ display: "flex", gap: 8 }}>
             <input

@@ -766,19 +766,74 @@ export async function listZonesForPlace(place_id: string): Promise<{
   return { layout_version_id: layout.id as string, zones: rows };
 }
 
-export async function listZoneItems(zone_id: string): Promise<ZoneItemInput[]> {
+export type ZoneItemRow = ZoneItemInput & { id: string };
+
+export async function listZoneItems(zone_id: string): Promise<ZoneItemRow[]> {
   const supabase = client();
   const { data, error } = await supabase
     .from(LOCATIONS_TABLES.zoneItems)
     .select(
-      "canonical_name, raw_label, brand, variant, size_text, category_labels, shelf_hint"
+      "id, canonical_name, raw_label, brand, variant, size_text, category_labels, shelf_hint"
     )
     .eq("zone_id", zone_id)
     .order("canonical_name");
   if (error) {
     throw new LocationsStoreError(error.message, "ZONE_ITEMS_GET_FAILED");
   }
-  return (data || []) as ZoneItemInput[];
+  return (data || []) as ZoneItemRow[];
+}
+
+export async function removeZoneItem(input: {
+  team_id: string;
+  zone_id: string;
+  item_id: string;
+}): Promise<{ zone_id: string; item_count: number }> {
+  const supabase = client();
+  const { data: zone, error: zoneError } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select("id, team_id")
+    .eq("id", input.zone_id)
+    .maybeSingle();
+  if (zoneError) {
+    throw new LocationsStoreError(zoneError.message, "ZONE_GET_FAILED");
+  }
+  if (!zone) {
+    throw new LocationsStoreError("Zone not found", "ZONE_NOT_FOUND");
+  }
+  if (zone.team_id !== input.team_id) {
+    throw new LocationsStoreError("Zone team mismatch", "FORBIDDEN");
+  }
+
+  const { error } = await supabase
+    .from(LOCATIONS_TABLES.zoneItems)
+    .delete()
+    .eq("id", input.item_id)
+    .eq("zone_id", input.zone_id);
+  if (error) {
+    throw new LocationsStoreError(error.message, "ZONE_ITEM_DELETE_FAILED");
+  }
+
+  const { count, error: countError } = await supabase
+    .from(LOCATIONS_TABLES.zoneItems)
+    .select("id", { count: "exact", head: true })
+    .eq("zone_id", input.zone_id);
+  if (countError) {
+    throw new LocationsStoreError(countError.message, "ZONE_ITEMS_COUNT_FAILED");
+  }
+  return { zone_id: input.zone_id, item_count: count || 0 };
+}
+
+/** Clear all draft items for a zone (does not publish by itself). */
+export async function clearZoneItems(input: {
+  team_id: string;
+  zone_id: string;
+}): Promise<{ zone_id: string; item_count: number }> {
+  return setZoneItems({
+    team_id: input.team_id,
+    zone_id: input.zone_id,
+    items: [],
+    mode: "replace",
+  });
 }
 
 export async function getPlaceContext(place_id: string): Promise<{

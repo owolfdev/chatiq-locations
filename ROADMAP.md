@@ -50,19 +50,24 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | ChatIQ: “Open store mapper” → sibling handoff | ✅ 2026-11-07 (link → `/map?place_id=`) |
 | Sibling: `/map` + `places.list_for_team` / `place.bind_bot` | ✅ 2026-11-07 |
 | Sibling: mapper shell (text/speak, sticky zone, inspect/add, compass/GPS) | ✅ 2026-11-07 |
-| Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract TBD |
+| Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract = **next** |
+| Mapper: add / remove / clear / replace zone items | ✅ 2026-11-07 |
 | Ingest: heuristic normalize → upsert/publish (LLM normalize next) | ✅ heuristic 2026-11-07 |
 | Sibling: auth (shared session or handoff) | Not started |
 
-### Phase 2 — Extraction salvage
+### Phase 2 — Extraction salvage (**resume here next**)
 
 | Work | Status |
 |------|--------|
+| **Next:** Port archived OpenAI vision extract into sibling | ⬅️ start here |
+| Process photos → editable draft in Text / speak | Not started |
 | Staged multi-image jobs + telemetry (`extract.job_*`) | Not started |
 | 1 / 3 / 8 image ladder green | Not started |
-| Review pending JSON → publish (swipe/list OK) | Not started |
+| Operator Add / Replace after draft (no auto-publish) | Spec locked; UI modes ready |
 | Photos ephemeral; text + pose durable | Spec locked 2026-11-07 |
 | Retain per-image payloads + `failure_reason` (debug TTL) | Not started |
+
+**Vision extract plan (locked 2026-11-07):** Reuse ChatIQ archived pipeline [`extract-zone-scan.ts`](../chatiq/src/lib/locations/extract-zone-scan.ts) (`gpt-5-mini` multimodal) — **not** Google Vision first. Run in `chatiq-locations` with `OPENAI_API_KEY`. Flow: photos → per-image extract → merge → fill mapper Text/speak draft → human Add or Replace → publish. Details: [`operator-input-and-hosting.md`](./dev_docs/operator-input-and-hosting.md) · [`vision-extract-next.md`](./dev_docs/vision-extract-next.md).
 
 ### Phase 3 — Concierge thin path
 
@@ -89,5 +94,5 @@ Geo place pick · recipe shopping · field-level review UI · native App Store c
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [#################___] ~85% -> Vision extract + LLM normalize + auth
+chatiq-locations: sibling v1: [#################___] ~86% -> Vision extract (see vision-extract-next.md)
 ```
