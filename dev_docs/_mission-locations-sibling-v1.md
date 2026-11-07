@@ -1,7 +1,7 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-07  
-Status: **Sibling live** (pilots + concierge). Next: ChatIQ bound-place picker + sibling mapper shell per locked input/hosting spec.
+Last updated: 2026-11-08  
+Status: **Sibling live** (pilots + concierge + vision draft). Next: deploy with `OPENAI_API_KEY`; job telemetry / LLM normalize / mapper auth.
 
 Owner: Engineering
 
@@ -21,9 +21,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-08):** **Vision extract in sibling** — port archived OpenAI `extract-zone-scan` → Process photos fills Text/speak draft → Add/Replace. Spec: [`vision-extract-next.md`](./vision-extract-next.md).
+**Next action (2026-11-08):** Deploy sibling with `OPENAI_API_KEY` / smoke Process photos on phone; then job telemetry or LLM normalize. Spec: [`vision-extract-next.md`](./vision-extract-next.md).
 
-Mapper shell + bound-place picker + add/remove/replace are shipped (needs deploy for latest). ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token. Sibling needs `OPENAI_API_KEY` for vision.
+Vision extract draft path is in code (local). ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token. Sibling: `OPENAI_API_KEY` (+ optional `LOCATIONS_VISION_MODEL`).
 
 ## Decisions (locked)
 
@@ -63,14 +63,14 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - [x] `_locations_*` tables on shared booking Supabase
 - [x] Commands/API: places, zones, publish, `map.resolve_item` (+ coverage / place map)
 - [x] Smoke **without vision**: `npm run smoke:organic`
-- [ ] ChatIQ bound-place picker + Open mapper link
-- [ ] Sibling mapper shell (text/image/compass) + LLM normalize → draft
+- [x] ChatIQ bound-place picker + Open mapper link
+- [x] Sibling mapper shell (text/image/compass) + heuristic normalize → draft (LLM normalize later)
 - [x] **Pilot DoD (manual):** allowlisted bots answer “where is X?” (Villa + Gourmet Bangkapi)
 
 ### Phase 2 — Operator extraction (salvage quality)
 
 - [ ] Multi-image pipeline staged + observable (1 / 3 / 8 ladder)
-- [ ] Mapper camera batch → draft → review → publish
+- [x] Mapper camera batch → draft → review → publish (OpenAI vision → Text/speak; no auto-publish)
 - [ ] Failures surface `failure_reason`; full photos TTL / debug retain
 
 ### Phase 3 — ChatIQ concierge thin path
@@ -94,6 +94,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-08 — Vision extract → Text/speak draft
+
+**What changed:** Ported OpenAI vision into sibling (`src/lib/vision/*`); `processMapperPhotos` FormData action; mapper **Process photos** fills editable Text/speak draft (Add/Replace unchanged). `OPENAI_API_KEY` / optional `LOCATIONS_VISION_MODEL` in `.env.example`; server action body limit 24mb.
+
+**Next:** Set key on Vercel + deploy; phone smoke; then job telemetry or LLM normalize.
+
+```text
+chatiq-locations: [##################__] ~90% -> Deploy vision + telemetry / LLM normalize
+```
 
 ### 2026-11-07 — Zone item add / remove / replace + vision next-doc
 

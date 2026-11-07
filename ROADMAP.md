@@ -50,24 +50,24 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | ChatIQ: “Open store mapper” → sibling handoff | ✅ 2026-11-07 (link → `/map?place_id=`) |
 | Sibling: `/map` + `places.list_for_team` / `place.bind_bot` | ✅ 2026-11-07 |
 | Sibling: mapper shell (text/speak, sticky zone, inspect/add, compass/GPS) | ✅ 2026-11-07 |
-| Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract = **next** |
+| Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract ✅ 2026-11-08 |
 | Mapper: add / remove / clear / replace zone items | ✅ 2026-11-07 |
 | Ingest: heuristic normalize → upsert/publish (LLM normalize next) | ✅ heuristic 2026-11-07 |
 | Sibling: auth (shared session or handoff) | Not started |
 
-### Phase 2 — Extraction salvage (**resume here next**)
+### Phase 2 — Extraction salvage
 
 | Work | Status |
 |------|--------|
-| **Next:** Port archived OpenAI vision extract into sibling | ⬅️ start here |
-| Process photos → editable draft in Text / speak | Not started |
-| Staged multi-image jobs + telemetry (`extract.job_*`) | Not started |
-| 1 / 3 / 8 image ladder green | Not started |
-| Operator Add / Replace after draft (no auto-publish) | Spec locked; UI modes ready |
-| Photos ephemeral; text + pose durable | Spec locked 2026-11-07 |
-| Retain per-image payloads + `failure_reason` (debug TTL) | Not started |
+| Port archived OpenAI vision extract into sibling | ✅ 2026-11-08 (`src/lib/vision/*`) |
+| Process photos → editable draft in Text / speak | ✅ 2026-11-08 |
+| Staged multi-image jobs + telemetry (`extract.job_*`) | Not started — **next** |
+| 1 / 3 / 8 image ladder green | Manual ready; formal ladder TBD |
+| Operator Add / Replace after draft (no auto-publish) | ✅ |
+| Photos ephemeral; text + pose durable | ✅ (no photo storage) |
+| Retain per-image payloads + `failure_reason` (debug TTL) | Partial — failures returned to UI |
 
-**Vision extract plan (locked 2026-11-07):** Reuse ChatIQ archived pipeline [`extract-zone-scan.ts`](../chatiq/src/lib/locations/extract-zone-scan.ts) (`gpt-5-mini` multimodal) — **not** Google Vision first. Run in `chatiq-locations` with `OPENAI_API_KEY`. Flow: photos → per-image extract → merge → fill mapper Text/speak draft → human Add or Replace → publish. Details: [`operator-input-and-hosting.md`](./dev_docs/operator-input-and-hosting.md) · [`vision-extract-next.md`](./dev_docs/vision-extract-next.md).
+**Vision extract (shipped 2026-11-08):** OpenAI `gpt-5-mini` in sibling — photos → extract → Text/speak draft → Add/Replace → publish. Needs `OPENAI_API_KEY` local + Vercel. Spec: [`vision-extract-next.md`](./dev_docs/vision-extract-next.md).
 
 ### Phase 3 — Concierge thin path
 
@@ -94,5 +94,5 @@ Geo place pick · recipe shopping · field-level review UI · native App Store c
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [#################___] ~86% -> Vision extract (see vision-extract-next.md)
+chatiq-locations: sibling v1: [##################__] ~90% -> Job telemetry / LLM normalize / mapper auth
 ```

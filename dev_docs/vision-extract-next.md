@@ -1,7 +1,7 @@
 # Vision extract — next session handoff
 
-Last updated: 2026-11-07  
-Status: **Next to build**  
+Last updated: 2026-11-08  
+Status: **Shipped (local)** — deploy + set `OPENAI_API_KEY` on Vercel to use in prod  
 Parent: [`operator-input-and-hosting.md`](./operator-input-and-hosting.md) · Roadmap Phase 2
 
 ## Goal
@@ -28,11 +28,11 @@ OPENAI_API_KEY=...
 LOCATIONS_VISION_MODEL=gpt-5-mini
 ```
 
-## Implementation sketch
+## Implementation (2026-11-08)
 
-1. `src/lib/vision/extract-zone-images.ts` — port single-image + merge from archived module (image bytes or data URLs from mapper upload; avoid requiring ChatIQ CDN first).
-2. Server action `processMapperPhotos` — accept photo blobs / FormData + sticky zone + pose → extract → return `{ draftText, raw?, failures? }`.
-3. Mapper client: **Process photos** → set Text/speak to draft (e.g. `aisle 9. item1, item2, …`) → operator edits → existing Add/Replace path.
+1. ✅ `src/lib/vision/extraction-mode.ts` + `extract-zone-images.ts` — OpenAI `gpt-5-mini` single-image + merge; data URLs from FormData (no CDN).
+2. ✅ Server action `processMapperPhotos` — FormData photos + sticky zone → `{ draftText, item_count, failures }` (no publish).
+3. ✅ Mapper client: **Process photos** → fills Text/speak → operator edits → Add/Replace.
 4. Later: `extract.job_*` staging + progress UI + ephemeral photo TTL.
 
 ## Draft text format

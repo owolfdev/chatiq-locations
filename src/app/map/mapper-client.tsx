@@ -15,6 +15,7 @@ import {
   applyMapperText,
   clearMapperZoneItems,
   fetchZoneInventory,
+  processMapperPhotos,
   refreshMapperZones,
   removeMapperItem,
   type MapperPose,
@@ -233,16 +234,35 @@ export function MapperClient(props: Props) {
       setError("Take or add at least one photo");
       return;
     }
-    if (!stickyReady && !text.trim()) {
-      setError(
-        "Set sticky zone (e.g. aisle 9) or include zone in text before processing photos"
-      );
+    if (!stickyReady) {
+      setError("Set sticky zone (e.g. aisle 9) before processing photos");
       return;
     }
     setError(null);
-    setStatus(
-      `Queued ${photos.length} photo(s) for ${stickyType} ${stickyLabel || "(from text)"}. Vision extract is next — use text for items for now.`
-    );
+    setStatus(null);
+    const formData = new FormData();
+    formData.set("place_id", props.placeId);
+    formData.set("sticky_zone_type", stickyType);
+    formData.set("sticky_zone_label", stickyLabel.trim());
+    for (const p of photos.slice(0, 8)) {
+      formData.append("photos", p.file);
+    }
+    startTransition(async () => {
+      const res = await processMapperPhotos(formData);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setText(res.draftText);
+      const failNote =
+        res.failures.length > 0
+          ? ` · ${res.failures.length} image(s) failed`
+          : "";
+      setStatus(
+        `Draft ready · ${res.item_count} item(s) from ${photos.length} photo(s)${failNote}. Edit Text/speak, then Add or Replace.`
+      );
+      clearPhotos();
+    });
   }
 
   function onAddItem() {
@@ -546,15 +566,20 @@ export function MapperClient(props: Props) {
             <button
               type="button"
               onClick={processPhotos}
+              disabled={pending}
               style={{ ...secondaryBtn, marginTop: 8 }}
             >
-              Process photos
+              {pending ? "Extracting…" : "Process photos"}
             </button>
+            <p style={hint}>
+              Runs OpenAI vision → fills Text/speak as a draft. Does not publish
+              until you Add or Replace.
+            </p>
           </>
         ) : (
           <p style={hint}>
-            Vision extract comes next — queue + thumbnails work now; items still
-            via text until then.
+            Queue shelf shots for the sticky zone, then Process photos to draft
+            items into Text/speak.
           </p>
         )}
       </section>

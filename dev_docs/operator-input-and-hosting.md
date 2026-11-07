@@ -105,7 +105,7 @@ Re-shoot beats archiving every pass.
 
 ## Vision extract (next build)
 
-See [`vision-extract-next.md`](./vision-extract-next.md): port archived OpenAI `gpt-5-mini` extract into sibling; Process photos → Text/speak draft → Add/Replace. Not Google-first.
+See [`vision-extract-next.md`](./vision-extract-next.md): OpenAI `gpt-5-mini` extract in sibling (2026-11-08); Process photos → Text/speak draft → Add/Replace. Not Google-first. Needs `OPENAI_API_KEY`.
 
 ## Out of scope here
 
