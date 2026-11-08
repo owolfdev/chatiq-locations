@@ -95,6 +95,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-09 — Multi-photo Process: compress + sequential API
+
+**What changed:** Multi-image Server Action uploads were crashing the mapper page on Vercel (body/timeout). Client now compresses shots, POSTs `/api/map/process-photos` one image at a time (`maxDuration` 60), merges drafts locally. Cap 4 photos.
+
+**Next:** Deploy; phone-smoke 2–3 shelf shots.
+
+```text
+chatiq-locations: [##################__] ~92% -> Deploy multi-photo fix
+```
+
 ### 2026-11-09 — Matcher: brand + category fillers (Ruffles)
 
 **What changed:** `map.resolve_item` no longer requires filler words like `potato` when the query ends in an ambiguous noun (`chips`). Brand-led queries (`ruffles potato chips`) match `Ruffles Original` / variants; peanut-butter guard still holds.

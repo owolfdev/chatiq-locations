@@ -15,12 +15,41 @@ import {
   applyMapperText,
   clearMapperZoneItems,
   fetchZoneInventory,
-  processMapperPhotos,
   refreshMapperZones,
   removeMapperItem,
   type MapperPose,
 } from "./actions";
+import { compressImageForUpload } from "@/lib/vision/compress-image-client";
+import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
 import type { ZoneItemRow, ZoneListRow } from "@/lib/supabase/store";
+
+type ProcessPhotosApiResult =
+  | {
+      ok: true;
+      draftText: string;
+      item_count: number;
+      failures: Array<{ image_index: number; error: string }>;
+    }
+  | { ok: false; error: string };
+
+function mergeDraftTexts(drafts: string[]): string {
+  const cleaned = drafts.map((d) => d.trim()).filter(Boolean);
+  if (cleaned.length === 0) return "";
+  if (cleaned.length === 1) return cleaned[0];
+
+  const zonePrefix = cleaned[0].split(".")[0]?.trim() || cleaned[0];
+  const items = new Set<string>();
+  for (const draft of cleaned) {
+    const dot = draft.indexOf(".");
+    const rest = dot >= 0 ? draft.slice(dot + 1) : draft;
+    for (const part of rest.split(",")) {
+      const name = part.trim();
+      if (name) items.add(name);
+    }
+  }
+  if (items.size === 0) return zonePrefix;
+  return `${zonePrefix}. ${Array.from(items).join(", ")}`;
+}
 
 type SpeechRec = {
   lang: string;
@@ -215,7 +244,7 @@ export function MapperClient(props: Props) {
       url: URL.createObjectURL(file),
     }));
     setPhotos((prev) => {
-      const merged = [...prev, ...next].slice(0, 12);
+      const merged = [...prev, ...next].slice(0, MAX_PROCESS_PHOTOS);
       // revoke previews that were dropped
       for (const p of prev) {
         if (!merged.includes(p)) URL.revokeObjectURL(p.url);
@@ -240,28 +269,83 @@ export function MapperClient(props: Props) {
     }
     setError(null);
     setStatus(null);
-    const formData = new FormData();
-    formData.set("place_id", props.placeId);
-    formData.set("sticky_zone_type", stickyType);
-    formData.set("sticky_zone_label", stickyLabel.trim());
-    for (const p of photos.slice(0, 8)) {
-      formData.append("photos", p.file);
-    }
+    const batch = photos.slice(0, MAX_PROCESS_PHOTOS);
     startTransition(async () => {
-      const res = await processMapperPhotos(formData);
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        setStatus(`Compressing ${batch.length} photo(s)…`);
+        const compressed: File[] = [];
+        for (const p of batch) {
+          compressed.push(await compressImageForUpload(p.file));
+        }
+
+        // One image per request — multi-file Server Actions crash on Vercel
+        // body limits; batched vision also times out serverless defaults.
+        const drafts: string[] = [];
+        let itemCount = 0;
+        const failures: Array<{ image_index: number; error: string }> = [];
+
+        for (let i = 0; i < compressed.length; i++) {
+          setStatus(`Extracting photo ${i + 1} of ${compressed.length}…`);
+          const formData = new FormData();
+          formData.set("place_id", props.placeId);
+          formData.set("sticky_zone_type", stickyType);
+          formData.set("sticky_zone_label", stickyLabel.trim());
+          formData.append("photos", compressed[i]);
+
+          const response = await fetch("/api/map/process-photos", {
+            method: "POST",
+            body: formData,
+          });
+
+          let res: ProcessPhotosApiResult;
+          try {
+            res = (await response.json()) as ProcessPhotosApiResult;
+          } catch {
+            setError(
+              `Photo ${i + 1} failed (${response.status}). Try again with fewer shots.`
+            );
+            return;
+          }
+
+          if (!res.ok) {
+            failures.push({ image_index: i + 1, error: res.error });
+            continue;
+          }
+          drafts.push(res.draftText);
+          itemCount += res.item_count;
+          for (const f of res.failures) {
+            failures.push({
+              image_index: i + 1,
+              error: f.error,
+            });
+          }
+        }
+
+        if (drafts.length === 0) {
+          setError(
+            failures[0]?.error ||
+              "Vision extract failed for all photos. Try one photo at a time."
+          );
+          return;
+        }
+
+        const draftText = mergeDraftTexts(drafts);
+        setText(draftText);
+        const failNote =
+          failures.length > 0
+            ? ` · ${failures.length} image warning(s)`
+            : "";
+        setStatus(
+          `Draft ready · ~${itemCount} item hit(s) from ${drafts.length}/${batch.length} photo(s)${failNote}. Edit Text/speak, then Add or Replace.`
+        );
+        clearPhotos();
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Process photos failed — try one image, or reload and retry."
+        );
       }
-      setText(res.draftText);
-      const failNote =
-        res.failures.length > 0
-          ? ` · ${res.failures.length} image(s) failed`
-          : "";
-      setStatus(
-        `Draft ready · ${res.item_count} item(s) from ${photos.length} photo(s)${failNote}. Edit Text/speak, then Add or Replace.`
-      );
-      clearPhotos();
     });
   }
 
@@ -572,14 +656,15 @@ export function MapperClient(props: Props) {
               {pending ? "Extracting…" : "Process photos"}
             </button>
             <p style={hint}>
-              Runs OpenAI vision → fills Text/speak as a draft. Does not publish
-              until you Add or Replace.
+              Up to {MAX_PROCESS_PHOTOS} shots · resized on device · extracted
+              one-by-one (avoids mobile upload crashes). Does not publish until
+              you Add or Replace.
             </p>
           </>
         ) : (
           <p style={hint}>
-            Queue shelf shots for the sticky zone, then Process photos to draft
-            items into Text/speak.
+            Queue up to {MAX_PROCESS_PHOTOS} shelf shots for the sticky zone,
+            then Process photos to draft items into Text/speak.
           </p>
         )}
       </section>
