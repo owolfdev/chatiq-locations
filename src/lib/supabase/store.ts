@@ -961,6 +961,26 @@ const AMBIGUOUS_PRIMARY_TOKENS = new Set([
   "spread",
 ]);
 
+/**
+ * Category fillers between brand and ambiguous noun.
+ * "ruffles potato chips" must match "Ruffles Original" on brand alone —
+ * requiring "potato" would miss every branded chip SKU that omits "potato".
+ */
+const CATEGORY_FILLER_TOKENS = new Set([
+  "potato",
+  "tortilla",
+  "corn",
+  "pita",
+  "veggie",
+  "vegetable",
+  "rice",
+  "wheat",
+  "oat",
+  "oats",
+  "multi",
+  "grain",
+]);
+
 function hasWholeToken(hay: string, token: string): boolean {
   const re = new RegExp(`(?:^|\\s)${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`);
   return re.test(hay);
@@ -985,13 +1005,24 @@ function textMatchesQuery(haystack: string, query: string): boolean {
   // All tokens, or last token as primary noun when distinctive (≥6): "breakfast cereal"
   if (tokens.every((t) => hay.includes(t))) return true;
   const primary = tokens[tokens.length - 1];
-  // "paper products" / "peanut butter": require every non-generic token
+  // "paper products" / "peanut butter" / "ruffles potato chips":
+  // drop generics + category fillers; keep brand/specific tokens.
+  // Fall back to all non-generic when nothing distinctive remains ("potato chips").
   if (
     GENERIC_QUERY_TOKENS.has(primary) ||
     AMBIGUOUS_PRIMARY_TOKENS.has(primary)
   ) {
-    const required = tokens.filter((t) => !GENERIC_QUERY_TOKENS.has(t));
-    return required.length > 0 && required.every((t) => hay.includes(t));
+    const withoutGeneric = tokens.filter((t) => !GENERIC_QUERY_TOKENS.has(t));
+    const distinctive = withoutGeneric.filter(
+      (t) =>
+        !AMBIGUOUS_PRIMARY_TOKENS.has(t) && !CATEGORY_FILLER_TOKENS.has(t)
+    );
+    const required =
+      distinctive.length > 0 ? distinctive : withoutGeneric;
+    return (
+      required.length > 0 &&
+      required.every((t) => hasWholeToken(hay, t) || hay.includes(t))
+    );
   }
   return primary.length >= 6 && hasWholeToken(hay, primary);
 }
@@ -1172,9 +1203,14 @@ export async function resolveItem(input: {
 
   let matches = [...zoneMatches, ...itemMatches];
 
-  // Prefer multi-token hits: "Scott toilet" keeps Scott TP, drops "Duck toilet cleaner"
+  // Prefer multi-token hits: "Scott toilet" keeps Scott TP, drops "Duck toilet cleaner".
+  // Ignore ambiguous nouns + category fillers so "ruffles potato chips" keeps Ruffles
+  // instead of only generic "potato chips" rows.
   const distinctive = queryTokens(query).filter(
-    (t) => !GENERIC_QUERY_TOKENS.has(t)
+    (t) =>
+      !GENERIC_QUERY_TOKENS.has(t) &&
+      !AMBIGUOUS_PRIMARY_TOKENS.has(t) &&
+      !CATEGORY_FILLER_TOKENS.has(t)
   );
   if (distinctive.length >= 2) {
     const score = (name: string) => {
@@ -1186,6 +1222,15 @@ export async function resolveItem(input: {
     const best = scored.reduce((max, s) => Math.max(max, s.n), 0);
     if (best >= 2) {
       matches = scored.filter((s) => s.n >= 2).map((s) => s.m);
+    }
+  } else if (distinctive.length === 1) {
+    const brand = distinctive[0];
+    const withBrand = matches.filter((m) => {
+      const hay = normalizeSearchText(m.matched_name);
+      return hasWholeToken(hay, brand) || hay.includes(brand);
+    });
+    if (withBrand.length > 0) {
+      matches = withBrand;
     }
   }
 

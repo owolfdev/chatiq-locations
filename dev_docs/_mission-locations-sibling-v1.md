@@ -95,6 +95,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-09 — Matcher: brand + category fillers (Ruffles)
+
+**What changed:** `map.resolve_item` no longer requires filler words like `potato` when the query ends in an ambiguous noun (`chips`). Brand-led queries (`ruffles potato chips`) match `Ruffles Original` / variants; peanut-butter guard still holds.
+
+**Next:** Deploy sibling; re-ask Gourmet Bangkapi chat for Ruffles.
+
+```text
+chatiq-locations: [##################__] ~91% -> Deploy matcher fix + vision smoke
+```
+
 ### 2026-11-08 — Vision extract → Text/speak draft
 
 **What changed:** Ported OpenAI vision into sibling (`src/lib/vision/*`); `processMapperPhotos` FormData action; mapper **Process photos** fills editable Text/speak draft (Add/Replace unchanged). `OPENAI_API_KEY` / optional `LOCATIONS_VISION_MODEL` in `.env.example`; server action body limit 24mb.
