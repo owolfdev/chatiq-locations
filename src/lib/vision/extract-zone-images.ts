@@ -13,7 +13,7 @@ const DEFAULT_MODEL = "gpt-5-mini";
 const IMAGE_EXTRACTION_CONCURRENCY = 2;
 const SINGLE_IMAGE_MAX_COMPLETION_TOKENS = 4096;
 const MERGE_MAX_COMPLETION_TOKENS = 1600;
-const MAX_IMAGES = 4;
+const MAX_IMAGES = 12;
 
 export type ExtractedZoneItem = {
   canonical_name: string;

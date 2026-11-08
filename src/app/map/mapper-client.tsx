@@ -51,6 +51,63 @@ function mergeDraftTexts(drafts: string[]): string {
   return `${zonePrefix}. ${Array.from(items).join(", ")}`;
 }
 
+/** Rough prior for first photo before we have timings (~OpenAI vision + RTT). */
+const DEFAULT_SECONDS_PER_PHOTO = 18;
+const COMPRESS_SECONDS_PER_PHOTO = 0.4;
+
+type ExtractProgress = {
+  phase: "compressing" | "extracting";
+  current: number;
+  total: number;
+  /** 0–100 */
+  percent: number;
+  label: string;
+  etaLabel: string;
+};
+
+function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `~${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  if (m < 10) return rem === 0 ? `~${m} min` : `~${m}m ${rem}s`;
+  return `~${m} min`;
+}
+
+function estimateEtaSeconds(input: {
+  phase: "compressing" | "extracting";
+  total: number;
+  elapsedMs: number;
+  completedExtracts: number;
+  /** Photos still queued including the one in flight */
+  remainingExtracts: number;
+}): number {
+  const avgExtractSec =
+    input.completedExtracts > 0
+      ? input.elapsedMs / 1000 / input.completedExtracts
+      : DEFAULT_SECONDS_PER_PHOTO;
+
+  if (input.phase === "compressing") {
+    return (
+      input.remainingExtracts * COMPRESS_SECONDS_PER_PHOTO +
+      input.total * avgExtractSec
+    );
+  }
+
+  // In-flight photo: credit elapsed time since last completion against avg
+  if (input.remainingExtracts <= 0) return 0;
+  const sinceLastCompleteMs =
+    input.completedExtracts > 0
+      ? input.elapsedMs - input.completedExtracts * avgExtractSec * 1000
+      : input.elapsedMs;
+  const currentRemaining = Math.max(
+    3,
+    avgExtractSec - Math.max(0, sinceLastCompleteMs) / 1000
+  );
+  const afterCurrent = Math.max(0, input.remainingExtracts - 1) * avgExtractSec;
+  return currentRemaining + afterCurrent;
+}
+
 type SpeechRec = {
   lang: string;
   interimResults: boolean;
@@ -95,10 +152,24 @@ export function MapperClient(props: Props) {
   const [addItemName, setAddItemName] = useState("");
   const [saveMode, setSaveMode] = useState<"append" | "replace">("append");
   const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
+  const [extractProgress, setExtractProgress] = useState<ExtractProgress | null>(
+    null
+  );
   const [listening, setListening] = useState(false);
   const [pending, startTransition] = useTransition();
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  const extractStartedAtRef = useRef(0);
+  const etaTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function clearEtaTick() {
+    if (etaTickRef.current != null) {
+      clearInterval(etaTickRef.current);
+      etaTickRef.current = null;
+    }
+  }
+
+  useEffect(() => () => clearEtaTick(), []);
 
   const pose: MapperPose = useMemo(
     () => ({
@@ -270,58 +341,154 @@ export function MapperClient(props: Props) {
     setError(null);
     setStatus(null);
     const batch = photos.slice(0, MAX_PROCESS_PHOTOS);
+    const total = batch.length;
+    const initialEta = formatDuration(
+      total * COMPRESS_SECONDS_PER_PHOTO + total * DEFAULT_SECONDS_PER_PHOTO
+    );
+    extractStartedAtRef.current = Date.now();
+    setExtractProgress({
+      phase: "compressing",
+      current: 0,
+      total,
+      percent: 2,
+      label: `Preparing ${total} photo${total === 1 ? "" : "s"}…`,
+      etaLabel: `About ${initialEta} remaining`,
+    });
+
     startTransition(async () => {
       try {
-        setStatus(`Compressing ${batch.length} photo(s)…`);
         const compressed: File[] = [];
-        for (const p of batch) {
-          compressed.push(await compressImageForUpload(p.file));
+        for (let i = 0; i < batch.length; i++) {
+          const elapsedMs = Date.now() - extractStartedAtRef.current;
+          const etaSec = estimateEtaSeconds({
+            phase: "compressing",
+            total,
+            elapsedMs,
+            completedExtracts: 0,
+            remainingExtracts: total - i,
+          });
+          setExtractProgress({
+            phase: "compressing",
+            current: i + 1,
+            total,
+            percent: Math.round(((i + 0.5) / total) * 8),
+            label: `Compressing photo ${i + 1} of ${total}…`,
+            etaLabel: `About ${formatDuration(etaSec)} remaining`,
+          });
+          compressed.push(await compressImageForUpload(batch[i].file));
         }
 
         // One image per request — multi-file Server Actions crash on Vercel
         // body limits; batched vision also times out serverless defaults.
         const drafts: string[] = [];
         let itemCount = 0;
+        let completedExtracts = 0;
         const failures: Array<{ image_index: number; error: string }> = [];
+        const extractDurationsMs: number[] = [];
 
         for (let i = 0; i < compressed.length; i++) {
-          setStatus(`Extracting photo ${i + 1} of ${compressed.length}…`);
+          const photoStart = Date.now();
+          const remainingExtracts = total - i;
+          const percent = Math.min(99, Math.round(8 + (i / total) * 92));
+
+          const pushExtractProgress = (label: string) => {
+            const elapsedMs = Date.now() - extractStartedAtRef.current;
+            const etaSec = estimateEtaSeconds({
+              phase: "extracting",
+              total,
+              elapsedMs,
+              completedExtracts,
+              remainingExtracts,
+            });
+            const etaLabel = `About ${formatDuration(etaSec)} remaining`;
+            setExtractProgress({
+              phase: "extracting",
+              current: i + 1,
+              total,
+              percent,
+              label,
+              etaLabel,
+            });
+            setStatus(
+              `Extracting photo ${i + 1} of ${total} · about ${formatDuration(etaSec)} left`
+            );
+          };
+
+          pushExtractProgress(`Extracting photo ${i + 1} of ${total}…`);
+          clearEtaTick();
+          etaTickRef.current = setInterval(() => {
+            pushExtractProgress(`Extracting photo ${i + 1} of ${total}…`);
+          }, 1000);
+
           const formData = new FormData();
           formData.set("place_id", props.placeId);
           formData.set("sticky_zone_type", stickyType);
           formData.set("sticky_zone_label", stickyLabel.trim());
           formData.append("photos", compressed[i]);
 
-          const response = await fetch("/api/map/process-photos", {
-            method: "POST",
-            body: formData,
-          });
+          let response: Response;
+          try {
+            response = await fetch("/api/map/process-photos", {
+              method: "POST",
+              body: formData,
+            });
+          } finally {
+            clearEtaTick();
+          }
 
           let res: ProcessPhotosApiResult;
           try {
             res = (await response.json()) as ProcessPhotosApiResult;
           } catch {
+            setExtractProgress(null);
             setError(
               `Photo ${i + 1} failed (${response.status}). Try again with fewer shots.`
             );
             return;
           }
 
+          extractDurationsMs.push(Date.now() - photoStart);
+          completedExtracts += 1;
+
           if (!res.ok) {
             failures.push({ image_index: i + 1, error: res.error });
-            continue;
+          } else {
+            drafts.push(res.draftText);
+            itemCount += res.item_count;
+            for (const f of res.failures) {
+              failures.push({
+                image_index: i + 1,
+                error: f.error,
+              });
+            }
           }
-          drafts.push(res.draftText);
-          itemCount += res.item_count;
-          for (const f of res.failures) {
-            failures.push({
-              image_index: i + 1,
-              error: f.error,
-            });
-          }
+
+          const afterElapsed = Date.now() - extractStartedAtRef.current;
+          const afterEta = estimateEtaSeconds({
+            phase: "extracting",
+            total,
+            elapsedMs: afterElapsed,
+            completedExtracts,
+            remainingExtracts: total - completedExtracts,
+          });
+          setExtractProgress({
+            phase: "extracting",
+            current: i + 1,
+            total,
+            percent: Math.round(8 + ((i + 1) / total) * 92),
+            label:
+              i + 1 < total
+                ? `Finished photo ${i + 1} of ${total}`
+                : `Finishing draft…`,
+            etaLabel:
+              i + 1 < total
+                ? `About ${formatDuration(afterEta)} remaining`
+                : "Almost done",
+          });
         }
 
         if (drafts.length === 0) {
+          setExtractProgress(null);
           setError(
             failures[0]?.error ||
               "Vision extract failed for all photos. Try one photo at a time."
@@ -335,11 +502,21 @@ export function MapperClient(props: Props) {
           failures.length > 0
             ? ` · ${failures.length} image warning(s)`
             : "";
+        const avgSec =
+          extractDurationsMs.length > 0
+            ? extractDurationsMs.reduce((a, b) => a + b, 0) /
+              extractDurationsMs.length /
+              1000
+            : DEFAULT_SECONDS_PER_PHOTO;
+        const elapsedSec = (Date.now() - extractStartedAtRef.current) / 1000;
         setStatus(
-          `Draft ready · ~${itemCount} item hit(s) from ${drafts.length}/${batch.length} photo(s)${failNote}. Edit Text/speak, then Add or Replace.`
+          `Draft ready · ~${itemCount} item hit(s) from ${drafts.length}/${batch.length} photo(s)${failNote}. Took ${formatDuration(elapsedSec)} (~${Math.round(avgSec)}s/photo). Edit Text/speak, then Add or Replace.`
         );
+        setExtractProgress(null);
         clearPhotos();
       } catch (e) {
+        clearEtaTick();
+        setExtractProgress(null);
         setError(
           e instanceof Error
             ? e.message
@@ -646,20 +823,76 @@ export function MapperClient(props: Props) {
                 />
               ))}
             </div>
-            <p style={hint}>{photos.length} photo(s) ready</p>
+            <p style={hint}>
+              {photos.length} photo(s) ready
+              {!extractProgress
+                ? ` · rough estimate ~${formatDuration(
+                    photos.length * DEFAULT_SECONDS_PER_PHOTO
+                  )} to process`
+                : null}
+            </p>
             <button
               type="button"
               onClick={processPhotos}
-              disabled={pending}
+              disabled={pending || Boolean(extractProgress)}
               style={{ ...secondaryBtn, marginTop: 8 }}
             >
-              {pending ? "Extracting…" : "Process photos"}
+              {extractProgress ? "Processing…" : "Process photos"}
             </button>
-            <p style={hint}>
-              Up to {MAX_PROCESS_PHOTOS} shots · resized on device · extracted
-              one-by-one (avoids mobile upload crashes). Does not publish until
-              you Add or Replace.
-            </p>
+            {extractProgress ? (
+              <div
+                style={{ marginTop: 12 }}
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    fontSize: 13,
+                    marginBottom: 6,
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{extractProgress.label}</span>
+                  <span style={{ color: "#555", whiteSpace: "nowrap" }}>
+                    {extractProgress.percent}%
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 10,
+                    borderRadius: 999,
+                    background: "#e8e8e8",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${extractProgress.percent}%`,
+                      background: "#111",
+                      borderRadius: 999,
+                      transition: "width 0.35s ease",
+                    }}
+                  />
+                </div>
+                <p style={{ ...hint, marginTop: 8 }}>
+                  {extractProgress.current} / {extractProgress.total}
+                  {extractProgress.phase === "extracting" ? " extracted" : " prepared"}
+                  {" · "}
+                  {extractProgress.etaLabel}
+                  {" · "}
+                  ~{DEFAULT_SECONDS_PER_PHOTO}s/photo typical
+                </p>
+              </div>
+            ) : (
+              <p style={hint}>
+                Up to {MAX_PROCESS_PHOTOS} shots · resized on device · extracted
+                one-by-one. Does not publish until you Add or Replace.
+              </p>
+            )}
           </>
         ) : (
           <p style={hint}>

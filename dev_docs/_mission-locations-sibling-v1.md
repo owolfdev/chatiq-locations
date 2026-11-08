@@ -97,7 +97,7 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ### 2026-11-09 — Multi-photo Process: compress + sequential API
 
-**What changed:** Multi-image Server Action uploads were crashing the mapper page on Vercel (body/timeout). Client now compresses shots, POSTs `/api/map/process-photos` one image at a time (`maxDuration` 60), merges drafts locally. Cap 4 photos.
+**What changed:** Multi-image Server Action uploads were crashing the mapper page on Vercel (body/timeout). Client now compresses shots, POSTs `/api/map/process-photos` one image at a time (`maxDuration` 60), merges drafts locally. Queue cap raised to **12** (aisle walks); not a platform memory hard limit.
 
 **Next:** Deploy; phone-smoke 2–3 shelf shots.
 
