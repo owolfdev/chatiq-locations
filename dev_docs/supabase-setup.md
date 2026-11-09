@@ -14,8 +14,16 @@ Storage buckets (when added): `_locations_*` or `locations-*` — same isolation
 | zones | `_locations_zones` |
 | zone items | `_locations_zone_items` |
 | publications | `_locations_zone_publications` |
+| capture sets | `_locations_capture_sets` |
+| capture assets | `_locations_capture_assets` |
+| extract jobs | `_locations_extract_jobs` |
+| storage bucket | `locations-capture` (private) |
 
 App code should use [`src/lib/supabase/tables.ts`](../src/lib/supabase/tables.ts) — not bare strings.
+
+Survey capture: see [`survey-capture-jobs.md`](./survey-capture-jobs.md). Also apply:
+
+[`../supabase/migrations/20261109000000_locations_capture_jobs.sql`](../supabase/migrations/20261109000000_locations_capture_jobs.sql)
 
 Booking tables stay unprefixed for now (live schema). No rename required.
 
@@ -36,7 +44,11 @@ SQL Editor → run:
 
 [`../supabase/migrations/20261105000000_locations_core_v0.sql`](../supabase/migrations/20261105000000_locations_core_v0.sql)
 
-Safe on a DB that already has booking tables — only creates `_locations_*`.
+Then survey jobs:
+
+[`../supabase/migrations/20261109000000_locations_capture_jobs.sql`](../supabase/migrations/20261109000000_locations_capture_jobs.sql)
+
+Safe on a DB that already has booking tables — only creates `_locations_*` (+ `locations-capture` bucket).
 
 If you already ran an older unprefixed draft (`places`, `zones`, …), drop those empty tables first or skip — this migration uses the prefixed names only.
 

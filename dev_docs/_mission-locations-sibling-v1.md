@@ -21,9 +21,9 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-08):** Deploy sibling with `OPENAI_API_KEY` / smoke Process photos on phone; then job telemetry or LLM normalize. Spec: [`vision-extract-next.md`](./vision-extract-next.md).
+**Next action (2026-11-09):** Apply [`20261109000000_locations_capture_jobs.sql`](../supabase/migrations/20261109000000_locations_capture_jobs.sql) on Supabase; deploy; smoke Survey sets (upload → queue extract → Use draft). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
 
-Vision extract draft path is in code (local). ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token. Sibling: `OPENAI_API_KEY` (+ optional `LOCATIONS_VISION_MODEL`).
+ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_token`). Sibling: `OPENAI_API_KEY`, same service/mapper token.
 
 ## Decisions (locked)
 
@@ -69,9 +69,9 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ### Phase 2 — Operator extraction (salvage quality)
 
-- [ ] Multi-image pipeline staged + observable (1 / 3 / 8 ladder)
+- [x] Multi-image pipeline staged + observable (capture sets + extract jobs + cron tick)
 - [x] Mapper camera batch → draft → review → publish (OpenAI vision → Text/speak; no auto-publish)
-- [ ] Failures surface `failure_reason`; full photos TTL / debug retain
+- [x] Failures surface `failure_reason`; photos in Storage with TTL cleanup
 
 ### Phase 3 — ChatIQ concierge thin path
 
@@ -94,6 +94,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-09 — Survey capture sets + background extract
+
+**What changed:** Capture sets / assets / extract jobs tables + `locations-capture` bucket; signed upload APIs; mapper Survey UI; cron `/api/cron/extract-tick`; draft → Use draft → Add/Replace; ChatIQ Open mapper passes `access_token`. Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+
+**Next:** Apply SQL migration on Supabase; deploy both apps; smoke aisle walk → desktop queue.
+
+```text
+chatiq-locations: [###################_] ~94% -> Migration apply + LLM normalize
+```
 
 ### 2026-11-09 — Multi-photo Process: compress + sequential API
 

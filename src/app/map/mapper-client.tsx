@@ -19,6 +19,8 @@ import {
   removeMapperItem,
   type MapperPose,
 } from "./actions";
+import { SurveyPanel } from "@/components/survey/survey-panel";
+import { readMapperToken } from "@/lib/survey/mapper-token-client";
 import { compressImageForUpload } from "@/lib/vision/compress-image-client";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
 import type { ZoneItemRow, ZoneListRow } from "@/lib/supabase/store";
@@ -170,6 +172,11 @@ export function MapperClient(props: Props) {
   }
 
   useEffect(() => () => clearEtaTick(), []);
+
+  // Persist ?access_token= for survey APIs (sessionStorage)
+  useEffect(() => {
+    readMapperToken();
+  }, []);
 
   const pose: MapperPose = useMemo(
     () => ({
@@ -901,6 +908,20 @@ export function MapperClient(props: Props) {
           </p>
         )}
       </section>
+
+      <SurveyPanel
+        placeId={props.placeId}
+        stickyType={stickyType}
+        stickyLabel={stickyLabel}
+        stickyReady={stickyReady}
+        onUseDraft={(draftText) => {
+          setText(draftText);
+          setStatus(
+            "Draft loaded from survey extract — edit Text/speak, then Add or Replace."
+          );
+          setError(null);
+        }}
+      />
 
       {error ? <p style={{ color: "#b71c1c", margin: 0 }}>{error}</p> : null}
       {status ? <p style={{ color: "#1b5e20", margin: 0 }}>{status}</p> : null}

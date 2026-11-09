@@ -61,11 +61,11 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 |------|--------|
 | Port archived OpenAI vision extract into sibling | ✅ 2026-11-08 (`src/lib/vision/*`) |
 | Process photos → editable draft in Text / speak | ✅ 2026-11-08 |
-| Staged multi-image jobs + telemetry (`extract.job_*`) | Not started — **next** |
+| Staged multi-image jobs + telemetry (`extract.job_*`) | ✅ 2026-11-09 capture sets + cron tick |
 | 1 / 3 / 8 image ladder green | Manual ready; formal ladder TBD |
 | Operator Add / Replace after draft (no auto-publish) | ✅ |
-| Photos ephemeral; text + pose durable | ✅ (no photo storage) |
-| Retain per-image payloads + `failure_reason` (debug TTL) | Partial — failures returned to UI |
+| Photos ephemeral; text + pose durable | ✅ survey Storage TTL (7d/14d) |
+| Retain per-image payloads + `failure_reason` (debug TTL) | ✅ on assets + jobs |
 
 **Vision extract (shipped 2026-11-08):** OpenAI `gpt-5-mini` in sibling — photos → extract → Text/speak draft → Add/Replace → publish. Needs `OPENAI_API_KEY` local + Vercel. Spec: [`vision-extract-next.md`](./dev_docs/vision-extract-next.md).
 
@@ -94,5 +94,5 @@ Geo place pick · recipe shopping · field-level review UI · native App Store c
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [##################__] ~90% -> Job telemetry / LLM normalize / mapper auth
+chatiq-locations: sibling v1: [###################_] ~94% -> Apply capture migration + LLM normalize
 ```
