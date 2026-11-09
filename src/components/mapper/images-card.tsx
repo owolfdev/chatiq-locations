@@ -45,7 +45,8 @@ type Props = {
   zoneReady: boolean;
   extractProgress: ImagesExtractProgress | null;
   pending: boolean;
-  onProcess: (files: File[]) => void;
+  /** Resolves true when a draft was produced. */
+  onProcess: (files: File[]) => Promise<boolean>;
   onStatus: (msg: string | null) => void;
   onError: (msg: string | null) => void;
 };
@@ -59,7 +60,8 @@ export function ImagesCard(props: Props) {
   const [loadedSetId, setLoadedSetId] = useState<string | null>(null);
   const [loadedSetName, setLoadedSetName] = useState<string | null>(null);
   const [sets, setSets] = useState<CaptureSet[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  /** Selection in the set dropdown (may differ briefly while loading). */
+  const [selectedSetId, setSelectedSetId] = useState("");
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<PhotoItem | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -112,6 +114,7 @@ export function ImagesCard(props: Props) {
     setPhotos([]);
     setLoadedSetId(null);
     setLoadedSetName(null);
+    setSelectedSetId("");
   }
 
   async function removePhoto(photo: PhotoItem) {
@@ -237,6 +240,7 @@ export function ImagesCard(props: Props) {
         setPhotos(withAssets);
         setLoadedSetId(setId);
         setLoadedSetName(setName);
+        setSelectedSetId(setId);
         await refreshSets();
         props.onStatus(`Saved set “${setName}” · ${withAssets.length} photo(s)`);
       } catch (e) {
@@ -283,7 +287,6 @@ export function ImagesCard(props: Props) {
     }
     setBusy(true);
     props.onError(null);
-    setPickerOpen(false);
     try {
       const res = await fetch(`/api/survey/sets/${set.id}/assets`, {
         headers: mapperAuthHeaders(),
@@ -325,6 +328,7 @@ export function ImagesCard(props: Props) {
       setPhotos(loaded);
       setLoadedSetId(set.id);
       setLoadedSetName(set.zone_label);
+      setSelectedSetId(set.id);
       props.onStatus(
         `Loaded “${set.zone_label}” · ${loaded.length} photo(s) — Process when ready`
       );
@@ -335,12 +339,22 @@ export function ImagesCard(props: Props) {
     }
   }
 
-  async function deleteLoadedSet() {
-    if (!loadedSetId || !loadedSetName) return;
-    if (!window.confirm(`Delete photo set “${loadedSetName}”?`)) return;
+  async function onSetSelectChange(nextId: string) {
+    setSelectedSetId(nextId);
+    if (!nextId) {
+      // Keep local photos; just detach from a saved set.
+      setLoadedSetId(null);
+      setLoadedSetName(null);
+      return;
+    }
+    const set = sets.find((s) => s.id === nextId);
+    if (set) await loadSet(set);
+  }
+
+  async function deleteSetById(setId: string, setName: string) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/survey/sets/${loadedSetId}`, {
+      const res = await fetch(`/api/survey/sets/${setId}`, {
         method: "DELETE",
         headers: mapperAuthHeaders(),
       });
@@ -348,15 +362,62 @@ export function ImagesCard(props: Props) {
       if (!json.ok) {
         props.onError(json.error || "Delete set failed");
         setBusy(false);
-        return;
+        return false;
       }
-      clearLocalPhotos();
+      if (loadedSetId === setId) {
+        clearLocalPhotos();
+        setSelectedSetId("");
+      } else if (selectedSetId === setId) {
+        setSelectedSetId("");
+      }
       await refreshSets();
-      props.onStatus(`Deleted set “${loadedSetName}”`);
+      props.onStatus(`Deleted set “${setName}” and its photos`);
+      return true;
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Delete set failed");
+      return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function deleteSelectedSet() {
+    const id = selectedSetId || loadedSetId;
+    if (!id) {
+      props.onError("Choose a set to delete");
+      return;
+    }
+    const name =
+      sets.find((s) => s.id === id)?.zone_label || loadedSetName || "this set";
+    if (
+      !window.confirm(
+        `Delete photo set “${name}” and all of its images from storage?`
+      )
+    ) {
+      return;
+    }
+    await deleteSetById(id, name);
+  }
+
+  async function runProcess() {
+    if (!props.zoneReady) {
+      props.onError("Load or set an active zone before processing photos");
+      return;
+    }
+    if (photos.length === 0) {
+      props.onError("Add or load at least one photo");
+      return;
+    }
+    const setId = loadedSetId;
+    const setName = loadedSetName;
+    const ok = await props.onProcess(photos.map((p) => p.file));
+    if (!ok || !setId || !setName) return;
+    if (
+      window.confirm(
+        `Draft ready. Delete set “${setName}” and its photos from storage? You can keep it if you want to re-process later.`
+      )
+    ) {
+      await deleteSetById(setId, setName);
     }
   }
 
@@ -370,19 +431,44 @@ export function ImagesCard(props: Props) {
         into Text/speak for the active zone.
       </p>
 
-      {loadedSetName ? (
-        <p style={{ margin: "0 0 10px", fontSize: 15 }}>
-          Loaded set: <strong>{loadedSetName}</strong>
-          <button
-            type="button"
-            onClick={() => void deleteLoadedSet()}
-            disabled={disabled}
-            style={{ ...linkBtn, marginLeft: 10, color: "#b71c1c" }}
-          >
-            Delete set
-          </button>
-        </p>
-      ) : null}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <select
+          value={selectedSetId}
+          onChange={(e) => void onSetSelectChange(e.target.value)}
+          disabled={disabled || !hasMapperToken()}
+          style={{ ...input, flex: 1, minWidth: 160 }}
+          aria-label="Photo set"
+        >
+          <option value="">
+            {hasMapperToken()
+              ? sets.length
+                ? "Select a photo set…"
+                : "No saved sets yet"
+              : "access_token required for sets"}
+          </option>
+          {sets.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.zone_label} ({s.asset_count})
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => void refreshSets()}
+          disabled={disabled || !hasMapperToken()}
+          style={secondaryBtn}
+        >
+          Refresh
+        </button>
+        <button
+          type="button"
+          onClick={() => void deleteSelectedSet()}
+          disabled={disabled || !(selectedSetId || loadedSetId)}
+          style={{ ...secondaryBtn, color: "#b71c1c", borderColor: "#ef9a9a" }}
+        >
+          Delete set
+        </button>
+      </div>
 
       <input
         ref={cameraRef}
@@ -426,22 +512,11 @@ export function ImagesCard(props: Props) {
         </button>
         <button
           type="button"
-          onClick={() => {
-            void refreshSets();
-            setPickerOpen((v) => !v);
-          }}
-          disabled={disabled}
-          style={secondaryBtn}
-        >
-          Load set
-        </button>
-        <button
-          type="button"
           onClick={() => void saveSet(false)}
           disabled={disabled || photos.length === 0}
           style={secondaryBtn}
         >
-          {loadedSetId ? "Save set" : "Save set"}
+          Save set
         </button>
         {loadedSetId ? (
           <button
@@ -464,48 +539,6 @@ export function ImagesCard(props: Props) {
           </button>
         ) : null}
       </div>
-
-      {pickerOpen ? (
-        <div
-          style={{
-            marginTop: 12,
-            border: "1px solid #e5e5e5",
-            borderRadius: 8,
-            padding: 10,
-            maxHeight: 220,
-            overflow: "auto",
-          }}
-        >
-          {!hasMapperToken() ? (
-            <p style={hint}>
-              Add <code>access_token</code> to the mapper URL to load/save sets.
-            </p>
-          ) : sets.length === 0 ? (
-            <p style={hint}>No saved sets yet.</p>
-          ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {sets.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => void loadSet(s)}
-                    disabled={disabled}
-                    style={zoneRow}
-                  >
-                    <span>
-                      <strong>{s.zone_label}</strong>
-                      <span style={{ color: "#666", marginLeft: 8 }}>
-                        {s.asset_count} photo(s)
-                      </span>
-                    </span>
-                    <span style={{ color: "#0b5fff" }}>Load</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
 
       {photos.length > 0 ? (
         <>
@@ -578,15 +611,7 @@ export function ImagesCard(props: Props) {
           </p>
           <button
             type="button"
-            onClick={() => {
-              if (!props.zoneReady) {
-                props.onError(
-                  "Load or set an active zone before processing photos"
-                );
-                return;
-              }
-              props.onProcess(photos.map((p) => p.file));
-            }}
+            onClick={() => void runProcess()}
             disabled={disabled}
             style={{ ...secondaryBtn, marginTop: 8 }}
           >
@@ -729,22 +754,10 @@ const secondaryBtn: CSSProperties = {
   color: "#111",
 };
 
-const linkBtn: CSSProperties = {
-  border: "none",
-  background: "none",
-  color: "#0b5fff",
-  fontSize: 15,
-  padding: 0,
-};
-
-const zoneRow: CSSProperties = {
-  width: "100%",
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "10px 8px",
-  border: "none",
-  borderBottom: "1px solid #eee",
-  background: "transparent",
-  textAlign: "left",
-  fontSize: 16,
+const input: CSSProperties = {
+  fontSize: 17,
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  background: "#fff",
 };

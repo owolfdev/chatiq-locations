@@ -397,13 +397,16 @@ export function MapperClient(props: Props) {
     rec.start();
   }
 
-  function processPhotos(files: File[]) {
+  function processPhotos(files: File[]): Promise<boolean> {
+    return new Promise((resolve) => {
     if (!files.length) {
       setError("Take or add at least one photo");
+      resolve(false);
       return;
     }
     if (!zoneReady) {
       setError("Set or load an active zone before processing photos");
+      resolve(false);
       return;
     }
     setError(null);
@@ -512,6 +515,7 @@ export function MapperClient(props: Props) {
             setError(
               `Photo ${i + 1} failed (${response.status}). Try again with fewer shots.`
             );
+            resolve(false);
             return;
           }
 
@@ -561,6 +565,7 @@ export function MapperClient(props: Props) {
             failures[0]?.error ||
               "Vision extract failed for all photos. Try one photo at a time."
           );
+          resolve(false);
           return;
         }
 
@@ -581,6 +586,7 @@ export function MapperClient(props: Props) {
           `Draft ready · ~${itemCount} item hit(s) from ${drafts.length}/${batch.length} photo(s)${failNote}. Took ${formatDuration(elapsedSec)} (~${Math.round(avgSec)}s/photo). Edit Text/speak, then Add or Replace.`
         );
         setExtractProgress(null);
+        resolve(true);
       } catch (e) {
         clearEtaTick();
         setExtractProgress(null);
@@ -589,7 +595,9 @@ export function MapperClient(props: Props) {
             ? e.message
             : "Process photos failed — try one image, or reload and retry."
         );
+        resolve(false);
       }
+    });
     });
   }
 
@@ -754,9 +762,44 @@ export function MapperClient(props: Props) {
           </p>
         ) : (
           <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
-            No zone selected — type a new one or load from the list below.
+            No zone selected — pick one below or type a new label and Save.
           </p>
         )}
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <select
+            value={activeZoneId || ""}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) {
+                setActiveZoneId(null);
+                setInspectId(null);
+                setInspectItems([]);
+                return;
+              }
+              const z = zones.find((row) => row.id === id);
+              if (z) selectZone(z);
+            }}
+            style={{ ...input, flex: 1, minWidth: 160 }}
+            aria-label="Load zone"
+          >
+            <option value="">
+              {zones.length ? "Select a zone…" : "No zones yet"}
+            </option>
+            {zones.map((z) => (
+              <option key={z.id} value={z.id}>
+                {z.zone_type} {z.zone_label} ({z.item_count})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void reloadZones()}
+            disabled={pending}
+            style={secondaryBtn}
+          >
+            Refresh
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <select
             value={zoneType}
@@ -874,48 +917,6 @@ export function MapperClient(props: Props) {
       {status ? (
         <p style={{ color: "#1b5e20", margin: 0, fontSize: 15 }}>{status}</p>
       ) : null}
-
-      <section style={card}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
-          <label style={{ ...label, marginBottom: 0 }}>Zones</label>
-          <button type="button" onClick={() => void reloadZones()} style={linkBtn}>
-            Refresh
-          </button>
-        </div>
-        {zones.length === 0 ? (
-          <p style={hint}>No zones yet — save your first aisle.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {zones.map((z) => (
-              <li key={z.id}>
-                <button
-                  type="button"
-                  onClick={() => selectZone(z)}
-                  style={{
-                    ...zoneRow,
-                    background:
-                      activeZoneId === z.id ? "#eef3ff" : "transparent",
-                  }}
-                >
-                  <span>
-                    {z.zone_type} {z.zone_label}
-                    {activeZoneId === z.id ? " · active" : ""}
-                  </span>
-                  <span style={{ color: "#666" }}>{z.item_count} items</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p style={hint}>Tap a zone to load it as active and inspect items.</p>
-      </section>
 
       {inspectZone ? (
         <section style={card}>
@@ -1055,14 +1056,3 @@ const linkBtn: CSSProperties = {
   padding: 0,
 };
 
-const zoneRow: CSSProperties = {
-  width: "100%",
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "10px 8px",
-  border: "none",
-  borderBottom: "1px solid #eee",
-  background: "transparent",
-  textAlign: "left",
-  fontSize: 16,
-};
