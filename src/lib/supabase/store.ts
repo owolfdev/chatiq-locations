@@ -559,6 +559,105 @@ export async function upsertZone(input: {
   return data as ZoneRow;
 }
 
+/** Rename an existing zone (type + label). Publishes snapshot title updates via republish if needed by caller. */
+export async function renameZone(input: {
+  team_id: string;
+  zone_id: string;
+  zone_type: string;
+  zone_label: string;
+}): Promise<ZoneRow> {
+  const supabase = client();
+  const zoneType = input.zone_type.trim();
+  const zoneLabel = input.zone_label.trim();
+  if (!zoneType || !zoneLabel) {
+    throw new LocationsStoreError(
+      "zone_type and zone_label required",
+      "INVALID_REQUEST"
+    );
+  }
+
+  const { data: existing, error: getError } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select(
+      "id, team_id, place_id, layout_version_id, zone_type, zone_label, zone_description, near_landmark, placement_note, is_active"
+    )
+    .eq("id", input.zone_id)
+    .maybeSingle();
+  if (getError) {
+    throw new LocationsStoreError(getError.message, "ZONE_GET_FAILED");
+  }
+  if (!existing || existing.team_id !== input.team_id) {
+    throw new LocationsStoreError("Zone not found", "ZONE_NOT_FOUND");
+  }
+
+  const { data: clash } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select("id")
+    .eq("layout_version_id", existing.layout_version_id)
+    .eq("zone_type", zoneType)
+    .eq("zone_label", zoneLabel)
+    .eq("is_active", true)
+    .neq("id", input.zone_id)
+    .maybeSingle();
+  if (clash) {
+    throw new LocationsStoreError(
+      `Zone already exists: ${zoneType} ${zoneLabel}`,
+      "ZONE_EXISTS"
+    );
+  }
+
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .update({
+      zone_type: zoneType,
+      zone_label: zoneLabel,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.zone_id)
+    .select(
+      "id, team_id, place_id, layout_version_id, zone_type, zone_label, zone_description, near_landmark, placement_note, is_active"
+    )
+    .single();
+  if (error || !data) {
+    throw new LocationsStoreError(
+      error?.message || "Failed to rename zone",
+      "ZONE_RENAME_FAILED"
+    );
+  }
+  return data as ZoneRow;
+}
+
+/** Soft-delete a zone (hidden from lists; items remain for audit). */
+export async function deleteZone(input: {
+  team_id: string;
+  zone_id: string;
+}): Promise<{ zone_id: string }> {
+  const supabase = client();
+  const { data: existing, error: getError } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select("id, team_id")
+    .eq("id", input.zone_id)
+    .maybeSingle();
+  if (getError) {
+    throw new LocationsStoreError(getError.message, "ZONE_GET_FAILED");
+  }
+  if (!existing || existing.team_id !== input.team_id) {
+    throw new LocationsStoreError("Zone not found", "ZONE_NOT_FOUND");
+  }
+
+  const { error } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.zone_id);
+  if (error) {
+    throw new LocationsStoreError(error.message, "ZONE_DELETE_FAILED");
+  }
+  return { zone_id: input.zone_id };
+}
+
 export async function setZoneItems(input: {
   team_id: string;
   zone_id: string;

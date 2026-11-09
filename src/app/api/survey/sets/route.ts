@@ -40,20 +40,23 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       place_id?: string;
+      /** Free-form album name (preferred). */
+      name?: string;
       zone_type?: string;
       zone_label?: string;
       pose_summary?: string | null;
     };
-    if (!body.place_id?.trim() || !body.zone_label?.trim()) {
+    const label = (body.name || body.zone_label || "").trim();
+    if (!body.place_id?.trim() || !label) {
       return NextResponse.json(
-        { ok: false, error: "place_id and zone_label required" },
+        { ok: false, error: "place_id and name required" },
         { status: 400 }
       );
     }
     const set = await createCaptureSet({
       place_id: body.place_id.trim(),
-      zone_type: body.zone_type || "aisle",
-      zone_label: body.zone_label.trim(),
+      zone_type: body.zone_type || "album",
+      zone_label: label,
       pose_summary: body.pose_summary,
     });
     return NextResponse.json({ ok: true, set });

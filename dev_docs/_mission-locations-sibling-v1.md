@@ -1,7 +1,7 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-08  
-Status: **Sibling live** (pilots + concierge + vision draft). Next: deploy with `OPENAI_API_KEY`; job telemetry / LLM normalize / mapper auth.
+Last updated: 2026-11-10  
+Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: deploy album UI; LLM normalize.
 
 Owner: Engineering
 
@@ -21,7 +21,7 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-09):** Apply [`20261109000000_locations_capture_jobs.sql`](../supabase/migrations/20261109000000_locations_capture_jobs.sql) on Supabase; deploy; smoke Survey sets (upload → queue extract → Use draft). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+**Next action (2026-11-10):** Deploy album mapper UX; smoke **Active zone** (save/load/rename/delete) + **Images** (save/load set → Process → Add/Replace). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
 
 ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_token`). Sibling: `OPENAI_API_KEY`, same service/mapper token.
 
@@ -36,7 +36,7 @@ ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_
 | **One bot ↔ one place** | No multi-store picker in shopper chat. |
 | **Source-agnostic ingest** | Image / voice / spreadsheet / chat → text → LLM normalize → draft → publish. |
 | **LLM normalize** | Required for freeform; deterministic sibling applies typed patches only; no auto-publish. |
-| **Mapper UX** | Dead simple: text/speak, camera batch, compass, optional coords; sticky zone; inspect + add item. |
+| **Mapper UX** | Active zone (load/save/rename/delete) + Images (named photo sets + live Process) + text/speak + compass. |
 | **Photos** | Ephemeral evidence; durable SoT is text + pose metadata (+ optional thumbnail). |
 | **Source of truth** | Sibling `_locations_*` DB; no dual-write forever. |
 | **Legacy in-`chatiq`** | Dashboard UI archived 2026-11-07; in-process libs quarantined. |
@@ -94,6 +94,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-10 — Album Images + Active zone mapper UX
+
+**What changed:** Replaced dual Camera/Survey mental model with one **Images** card (take/library/load set/save set, per-photo × + detail, Process live). **Sticky zone** → **Active zone** with save/rename/delete + load from list. Zone rename/delete store APIs; set download URLs + delete asset/set. Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+
+**Next:** Deploy; phone-smoke load/save set → Process → publish; rename zone.
+
+```text
+chatiq-locations: [####################] ~96% -> Deploy album UX smoke
+```
 
 ### 2026-11-09 — Survey capture sets + background extract
 

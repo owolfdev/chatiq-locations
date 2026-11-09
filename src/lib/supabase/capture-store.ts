@@ -258,9 +258,11 @@ export async function beginCaptureAssetUpload(input: {
   path: string;
 }> {
   const set = await getCaptureSet(input.set_id);
-  if (set.status !== "open") {
+  if (set.status === "discarded" || set.status === "processing") {
     throw new LocationsStoreError(
-      "Capture set is closed — open a new set for this zone",
+      set.status === "processing"
+        ? "Set is processing — try again when finished"
+        : "Capture set was discarded",
       "CAPTURE_SET_CLOSED"
     );
   }
@@ -327,6 +329,8 @@ export async function beginCaptureAssetUpload(input: {
     .from(LOCATIONS_TABLES.captureSets)
     .update({
       asset_count: set.asset_count + 1,
+      // Album model: keep sets editable after load/save (no forced close).
+      status: "open",
       updated_at: new Date().toISOString(),
     })
     .eq("id", set.id);
@@ -346,6 +350,119 @@ export async function beginCaptureAssetUpload(input: {
     token: signed.token,
     path: signed.path || storage_path,
   };
+}
+
+/** Signed download URLs so the mapper can load a set into the live photo grid. */
+export async function listCaptureAssetsWithUrls(
+  set_id: string,
+  expiresSec = 3600
+): Promise<Array<CaptureAssetRow & { download_url: string }>> {
+  const assets = await listCaptureAssets(set_id);
+  const supabase = client();
+  const out: Array<CaptureAssetRow & { download_url: string }> = [];
+  for (const asset of assets) {
+    const { data, error } = await supabase.storage
+      .from(LOCATIONS_CAPTURE_BUCKET)
+      .createSignedUrl(asset.storage_path, expiresSec);
+    if (error || !data?.signedUrl) {
+      throw new LocationsStoreError(
+        error?.message || "Failed to sign download URL",
+        "CAPTURE_SIGN_FAILED"
+      );
+    }
+    out.push({ ...asset, download_url: data.signedUrl });
+  }
+  return out;
+}
+
+export async function deleteCaptureAsset(asset_id: string): Promise<void> {
+  const supabase = client();
+  const { data: row, error } = await supabase
+    .from(LOCATIONS_TABLES.captureAssets)
+    .select("id, set_id, storage_path")
+    .eq("id", asset_id)
+    .maybeSingle();
+  if (error) {
+    throw new LocationsStoreError(error.message, "CAPTURE_ASSET_GET_FAILED");
+  }
+  if (!row) {
+    throw new LocationsStoreError("Asset not found", "CAPTURE_ASSET_NOT_FOUND");
+  }
+
+  await supabase.storage
+    .from(LOCATIONS_CAPTURE_BUCKET)
+    .remove([String(row.storage_path)]);
+
+  const { error: delError } = await supabase
+    .from(LOCATIONS_TABLES.captureAssets)
+    .delete()
+    .eq("id", asset_id);
+  if (delError) {
+    throw new LocationsStoreError(delError.message, "CAPTURE_ASSET_DELETE_FAILED");
+  }
+
+  const set = await getCaptureSet(String(row.set_id));
+  await supabase
+    .from(LOCATIONS_TABLES.captureSets)
+    .update({
+      asset_count: Math.max(0, set.asset_count - 1),
+      status: "open",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", set.id);
+}
+
+/** Rename a photo set (stored as zone_label; zone_type stays album/aisle). */
+export async function renameCaptureSet(input: {
+  set_id: string;
+  name: string;
+}): Promise<CaptureSetRow> {
+  const name = input.name.trim();
+  if (!name) {
+    throw new LocationsStoreError("name required", "INVALID_REQUEST");
+  }
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.captureSets)
+    .update({
+      zone_label: name,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.set_id)
+    .select(
+      "id, team_id, place_id, zone_type, zone_label, status, pose_summary, asset_count, draft_text, closed_at, created_at, updated_at"
+    )
+    .single();
+  if (error || !data) {
+    throw new LocationsStoreError(
+      error?.message || "Failed to rename set",
+      "CAPTURE_RENAME_FAILED"
+    );
+  }
+  return mapSet(data as Record<string, unknown>);
+}
+
+export async function discardCaptureSet(set_id: string): Promise<void> {
+  const set = await getCaptureSet(set_id);
+  const assets = await listCaptureAssets(set_id);
+  const supabase = client();
+  if (assets.length > 0) {
+    await supabase.storage
+      .from(LOCATIONS_CAPTURE_BUCKET)
+      .remove(assets.map((a) => a.storage_path));
+  }
+  await supabase
+    .from(LOCATIONS_TABLES.captureAssets)
+    .delete()
+    .eq("set_id", set_id);
+  await supabase
+    .from(LOCATIONS_TABLES.captureSets)
+    .update({
+      status: "discarded",
+      asset_count: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", set.id);
 }
 
 export async function confirmCaptureAssetUpload(input: {

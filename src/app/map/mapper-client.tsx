@@ -14,12 +14,18 @@ import {
   addMapperItem,
   applyMapperText,
   clearMapperZoneItems,
+  deleteMapperZone,
   fetchZoneInventory,
   refreshMapperZones,
   removeMapperItem,
+  renameMapperZone,
+  saveMapperZone,
   type MapperPose,
 } from "./actions";
-import { SurveyPanel } from "@/components/survey/survey-panel";
+import {
+  ImagesCard,
+  type ImagesExtractProgress,
+} from "@/components/mapper/images-card";
 import { readMapperToken } from "@/lib/survey/mapper-token-client";
 import { compressImageForUpload } from "@/lib/vision/compress-image-client";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
@@ -57,15 +63,7 @@ function mergeDraftTexts(drafts: string[]): string {
 const DEFAULT_SECONDS_PER_PHOTO = 18;
 const COMPRESS_SECONDS_PER_PHOTO = 0.4;
 
-type ExtractProgress = {
-  phase: "compressing" | "extracting";
-  current: number;
-  total: number;
-  /** 0–100 */
-  percent: number;
-  label: string;
-  etaLabel: string;
-};
+type ExtractProgress = ImagesExtractProgress;
 
 function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -138,8 +136,9 @@ function cardinal(deg: number | null): string {
 export function MapperClient(props: Props) {
   const [zones, setZones] = useState(props.initialZones);
   const [text, setText] = useState("");
-  const [stickyType, setStickyType] = useState("aisle");
-  const [stickyLabel, setStickyLabel] = useState("");
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  const [zoneType, setZoneType] = useState("aisle");
+  const [zoneLabel, setZoneLabel] = useState("");
   const [heading, setHeading] = useState<number | null>(null);
   const [coords, setCoords] = useState<{
     lat: number;
@@ -153,14 +152,11 @@ export function MapperClient(props: Props) {
   const [inspectItems, setInspectItems] = useState<ZoneItemRow[]>([]);
   const [addItemName, setAddItemName] = useState("");
   const [saveMode, setSaveMode] = useState<"append" | "replace">("append");
-  const [photos, setPhotos] = useState<Array<{ file: File; url: string }>>([]);
   const [extractProgress, setExtractProgress] = useState<ExtractProgress | null>(
     null
   );
   const [listening, setListening] = useState(false);
   const [pending, startTransition] = useTransition();
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const libraryRef = useRef<HTMLInputElement>(null);
   const extractStartedAtRef = useRef(0);
   const etaTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -228,12 +224,27 @@ export function MapperClient(props: Props) {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  const stickyReady = Boolean(stickyLabel.trim());
+  const zoneReady = Boolean(zoneLabel.trim());
+  const activeZone =
+    (activeZoneId && zones.find((z) => z.id === activeZoneId)) || null;
+
+  function selectZone(z: ZoneListRow) {
+    setActiveZoneId(z.id);
+    setZoneType(z.zone_type);
+    setZoneLabel(z.zone_label);
+    setInspectId(z.id);
+    setStatus(`Active zone · ${z.zone_type} ${z.zone_label}`);
+    setError(null);
+  }
 
   const submitText = useCallback(() => {
     const value = text.trim();
     if (!value) {
       setError("Type or speak something first");
+      return;
+    }
+    if (!zoneLabel.trim()) {
+      setError("Set or load an active zone first");
       return;
     }
     setError(null);
@@ -242,8 +253,8 @@ export function MapperClient(props: Props) {
       const res = await applyMapperText({
         place_id: props.placeId,
         text: value,
-        sticky_zone_type: stickyReady ? stickyType : null,
-        sticky_zone_label: stickyReady ? stickyLabel.trim() : null,
+        sticky_zone_type: zoneType,
+        sticky_zone_label: zoneLabel.trim(),
         mode: saveMode,
         publish: true,
         pose,
@@ -253,8 +264,9 @@ export function MapperClient(props: Props) {
         return;
       }
       setZones(res.zones);
-      setStickyType(res.zone.zone_type);
-      setStickyLabel(res.zone.zone_label);
+      setActiveZoneId(res.zone.id);
+      setZoneType(res.zone.zone_type);
+      setZoneLabel(res.zone.zone_label);
       setText("");
       setStatus(
         `${saveMode === "replace" ? "Replaced" : "Saved"} ${res.zone.zone_type} ${res.zone.zone_label}` +
@@ -263,15 +275,85 @@ export function MapperClient(props: Props) {
       );
       setInspectId(res.zone.id);
     });
-  }, [
-    text,
-    stickyReady,
-    stickyType,
-    stickyLabel,
-    saveMode,
-    pose,
-    props.placeId,
-  ]);
+  }, [text, zoneType, zoneLabel, saveMode, pose, props.placeId]);
+
+  function onSaveZone() {
+    if (!zoneLabel.trim()) {
+      setError("Enter a zone type and label");
+      return;
+    }
+    startTransition(async () => {
+      const res = await saveMapperZone({
+        place_id: props.placeId,
+        zone_type: zoneType,
+        zone_label: zoneLabel.trim(),
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setActiveZoneId(res.zone.id);
+      setInspectId(res.zone.id);
+      setStatus(`Zone saved · ${res.zone.zone_type} ${res.zone.zone_label}`);
+      setError(null);
+    });
+  }
+
+  function onRenameZone() {
+    if (!activeZoneId || !zoneLabel.trim()) {
+      setError("Load a zone, edit the label, then tap Rename");
+      return;
+    }
+    startTransition(async () => {
+      const res = await renameMapperZone({
+        place_id: props.placeId,
+        zone_id: activeZoneId,
+        zone_type: zoneType,
+        zone_label: zoneLabel.trim(),
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setZoneType(res.zone.zone_type);
+      setZoneLabel(res.zone.zone_label);
+      setStatus(`Renamed to ${res.zone.zone_type} ${res.zone.zone_label}`);
+      setError(null);
+    });
+  }
+
+  function onDeleteZone() {
+    if (!activeZoneId || !activeZone) {
+      setError("Load a zone first");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Delete zone ${activeZone.zone_type} ${activeZone.zone_label}? It will leave the list (soft delete).`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await deleteMapperZone({
+        place_id: props.placeId,
+        zone_id: activeZoneId,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setZones(res.zones);
+      setActiveZoneId(null);
+      setInspectId(null);
+      setInspectItems([]);
+      setZoneLabel("");
+      setStatus("Zone deleted");
+      setError(null);
+    });
+  }
 
   useEffect(() => {
     if (!inspectId) {
@@ -315,39 +397,18 @@ export function MapperClient(props: Props) {
     rec.start();
   }
 
-  function onPhotos(files: FileList | null) {
-    if (!files?.length) return;
-    const next = Array.from(files).map((file) => ({
-      file,
-      url: URL.createObjectURL(file),
-    }));
-    setPhotos((prev) => {
-      const merged = [...prev, ...next].slice(0, MAX_PROCESS_PHOTOS);
-      // revoke previews that were dropped
-      for (const p of prev) {
-        if (!merged.includes(p)) URL.revokeObjectURL(p.url);
-      }
-      return merged;
-    });
-  }
-
-  function clearPhotos() {
-    for (const p of photos) URL.revokeObjectURL(p.url);
-    setPhotos([]);
-  }
-
-  function processPhotos() {
-    if (!photos.length) {
+  function processPhotos(files: File[]) {
+    if (!files.length) {
       setError("Take or add at least one photo");
       return;
     }
-    if (!stickyReady) {
-      setError("Set sticky zone (e.g. aisle 9) before processing photos");
+    if (!zoneReady) {
+      setError("Set or load an active zone before processing photos");
       return;
     }
     setError(null);
     setStatus(null);
-    const batch = photos.slice(0, MAX_PROCESS_PHOTOS);
+    const batch = files.slice(0, MAX_PROCESS_PHOTOS);
     const total = batch.length;
     const initialEta = formatDuration(
       total * COMPRESS_SECONDS_PER_PHOTO + total * DEFAULT_SECONDS_PER_PHOTO
@@ -382,7 +443,7 @@ export function MapperClient(props: Props) {
             label: `Compressing photo ${i + 1} of ${total}…`,
             etaLabel: `About ${formatDuration(etaSec)} remaining`,
           });
-          compressed.push(await compressImageForUpload(batch[i].file));
+          compressed.push(await compressImageForUpload(batch[i]));
         }
 
         // One image per request — multi-file Server Actions crash on Vercel
@@ -429,8 +490,8 @@ export function MapperClient(props: Props) {
 
           const formData = new FormData();
           formData.set("place_id", props.placeId);
-          formData.set("sticky_zone_type", stickyType);
-          formData.set("sticky_zone_label", stickyLabel.trim());
+          formData.set("sticky_zone_type", zoneType);
+          formData.set("sticky_zone_label", zoneLabel.trim());
           formData.append("photos", compressed[i]);
 
           let response: Response;
@@ -520,7 +581,6 @@ export function MapperClient(props: Props) {
           `Draft ready · ~${itemCount} item hit(s) from ${drafts.length}/${batch.length} photo(s)${failNote}. Took ${formatDuration(elapsedSec)} (~${Math.round(avgSec)}s/photo). Edit Text/speak, then Add or Replace.`
         );
         setExtractProgress(null);
-        clearPhotos();
       } catch (e) {
         clearEtaTick();
         setExtractProgress(null);
@@ -578,7 +638,7 @@ export function MapperClient(props: Props) {
     if (!inspectId || !inspectZone) return;
     if (
       !window.confirm(
-        `Clear ALL items from ${inspectZone.zone_type} ${inspectZone.zone_label}? This publishes an empty zone.`
+        `Remove ALL items from ${inspectZone.zone_type} ${inspectZone.zone_label}? This publishes an empty zone.`
       )
     ) {
       return;
@@ -595,7 +655,9 @@ export function MapperClient(props: Props) {
       }
       setZones(res.zones);
       setInspectItems([]);
-      setStatus(`Cleared ${inspectZone.zone_type} ${inspectZone.zone_label}`);
+      setStatus(
+        `Removed all items from ${inspectZone.zone_type} ${inspectZone.zone_label}`
+      );
     });
   }
 
@@ -678,11 +740,27 @@ export function MapperClient(props: Props) {
       </section>
 
       <section style={card}>
-        <label style={label}>Sticky zone</label>
+        <label style={label}>Active zone</label>
+        {zoneReady ? (
+          <p
+            style={{
+              margin: "0 0 10px",
+              fontSize: "1.35rem",
+              fontWeight: 700,
+              lineHeight: 1.2,
+            }}
+          >
+            {zoneType} {zoneLabel}
+          </p>
+        ) : (
+          <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
+            No zone selected — type a new one or load from the list below.
+          </p>
+        )}
         <div style={{ display: "flex", gap: 8 }}>
           <select
-            value={stickyType}
-            onChange={(e) => setStickyType(e.target.value)}
+            value={zoneType}
+            onChange={(e) => setZoneType(e.target.value)}
             style={input}
           >
             <option value="aisle">aisle</option>
@@ -690,15 +768,41 @@ export function MapperClient(props: Props) {
             <option value="shelf">shelf</option>
           </select>
           <input
-            value={stickyLabel}
-            onChange={(e) => setStickyLabel(e.target.value)}
+            value={zoneLabel}
+            onChange={(e) => setZoneLabel(e.target.value)}
             placeholder="9 or Frozen foods"
             style={{ ...input, flex: 1 }}
           />
         </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={onSaveZone}
+            disabled={pending || !zoneReady}
+            style={primaryBtn}
+          >
+            Save zone
+          </button>
+          <button
+            type="button"
+            onClick={onRenameZone}
+            disabled={pending || !activeZoneId || !zoneReady}
+            style={secondaryBtn}
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={onDeleteZone}
+            disabled={pending || !activeZoneId}
+            style={{ ...secondaryBtn, color: "#b71c1c", borderColor: "#ef9a9a" }}
+          >
+            Delete zone
+          </button>
+        </div>
         <p style={hint}>
-          Set once, then snap or say items. Text can also include the zone
-          (“aisle 9. cereal, peanut butter”).
+          Preview text and processed photos publish into this zone (Add or
+          Replace).
         </p>
       </section>
 
@@ -754,173 +858,14 @@ export function MapperClient(props: Props) {
         </div>
       </section>
 
-      <section style={card}>
-        <label style={label}>Camera</label>
-        <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
-          On a phone, <strong>Take photo</strong> opens the camera. Add several
-          shots of the same zone, then process as a batch.
-        </p>
-        {/* Hidden inputs: capture forces camera on mobile; library allows multi-pick */}
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={(e) => {
-            onPhotos(e.target.files);
-            e.target.value = "";
-          }}
-          style={{ display: "none" }}
-        />
-        <input
-          ref={libraryRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(e) => {
-            onPhotos(e.target.files);
-            e.target.value = "";
-          }}
-          style={{ display: "none" }}
-        />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => cameraRef.current?.click()}
-            style={primaryBtn}
-          >
-            Take photo
-          </button>
-          <button
-            type="button"
-            onClick={() => libraryRef.current?.click()}
-            style={secondaryBtn}
-          >
-            Add from library
-          </button>
-          {photos.length > 0 ? (
-            <button type="button" onClick={clearPhotos} style={secondaryBtn}>
-              Clear
-            </button>
-          ) : null}
-        </div>
-        {photos.length > 0 ? (
-          <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-                marginTop: 12,
-              }}
-            >
-              {photos.map((p) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={p.url}
-                  src={p.url}
-                  alt=""
-                  style={{
-                    width: "100%",
-                    aspectRatio: "1",
-                    objectFit: "cover",
-                    borderRadius: 8,
-                    border: "1px solid #e5e5e5",
-                  }}
-                />
-              ))}
-            </div>
-            <p style={hint}>
-              {photos.length} photo(s) ready
-              {!extractProgress
-                ? ` · rough estimate ~${formatDuration(
-                    photos.length * DEFAULT_SECONDS_PER_PHOTO
-                  )} to process`
-                : null}
-            </p>
-            <button
-              type="button"
-              onClick={processPhotos}
-              disabled={pending || Boolean(extractProgress)}
-              style={{ ...secondaryBtn, marginTop: 8 }}
-            >
-              {extractProgress ? "Processing…" : "Process photos"}
-            </button>
-            {extractProgress ? (
-              <div
-                style={{ marginTop: 12 }}
-                role="status"
-                aria-live="polite"
-                aria-busy="true"
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    fontSize: 15,
-                    marginBottom: 6,
-                  }}
-                >
-                  <span style={{ fontWeight: 600 }}>{extractProgress.label}</span>
-                  <span style={{ color: "#555", whiteSpace: "nowrap" }}>
-                    {extractProgress.percent}%
-                  </span>
-                </div>
-                <div
-                  style={{
-                    height: 10,
-                    borderRadius: 999,
-                    background: "#e8e8e8",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${extractProgress.percent}%`,
-                      background: "#111",
-                      borderRadius: 999,
-                      transition: "width 0.35s ease",
-                    }}
-                  />
-                </div>
-                <p style={{ ...hint, marginTop: 8 }}>
-                  {extractProgress.current} / {extractProgress.total}
-                  {extractProgress.phase === "extracting" ? " extracted" : " prepared"}
-                  {" · "}
-                  {extractProgress.etaLabel}
-                  {" · "}
-                  ~{DEFAULT_SECONDS_PER_PHOTO}s/photo typical
-                </p>
-              </div>
-            ) : (
-              <p style={hint}>
-                Up to {MAX_PROCESS_PHOTOS} shots · resized on device · extracted
-                one-by-one. Does not publish until you Add or Replace.
-              </p>
-            )}
-          </>
-        ) : (
-          <p style={hint}>
-            Queue up to {MAX_PROCESS_PHOTOS} shelf shots for the sticky zone,
-            then Process photos to draft items into Text/speak.
-          </p>
-        )}
-      </section>
-
-      <SurveyPanel
+      <ImagesCard
         placeId={props.placeId}
-        stickyType={stickyType}
-        stickyLabel={stickyLabel}
-        stickyReady={stickyReady}
-        onUseDraft={(draftText) => {
-          setText(draftText);
-          setStatus(
-            "Draft loaded from survey extract — edit Text/speak, then Add or Replace."
-          );
-          setError(null);
-        }}
+        zoneReady={zoneReady}
+        extractProgress={extractProgress}
+        pending={pending}
+        onProcess={processPhotos}
+        onStatus={setStatus}
+        onError={setError}
       />
 
       {error ? (
@@ -952,14 +897,16 @@ export function MapperClient(props: Props) {
               <li key={z.id}>
                 <button
                   type="button"
-                  onClick={() => setInspectId(z.id)}
+                  onClick={() => selectZone(z)}
                   style={{
                     ...zoneRow,
-                    background: inspectId === z.id ? "#eef3ff" : "transparent",
+                    background:
+                      activeZoneId === z.id ? "#eef3ff" : "transparent",
                   }}
                 >
                   <span>
                     {z.zone_type} {z.zone_label}
+                    {activeZoneId === z.id ? " · active" : ""}
                   </span>
                   <span style={{ color: "#666" }}>{z.item_count} items</span>
                 </button>
@@ -967,6 +914,7 @@ export function MapperClient(props: Props) {
             ))}
           </ul>
         )}
+        <p style={hint}>Tap a zone to load it as active and inspect items.</p>
       </section>
 
       {inspectZone ? (
@@ -989,7 +937,7 @@ export function MapperClient(props: Props) {
               disabled={pending || inspectItems.length === 0}
               style={{ ...secondaryBtn, color: "#b71c1c", borderColor: "#ef9a9a" }}
             >
-              Clear all
+              Remove all
             </button>
           </div>
           <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, fontSize: 16 }}>

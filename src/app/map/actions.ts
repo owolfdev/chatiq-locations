@@ -7,12 +7,14 @@ import {
 } from "@/lib/vision/process-mapper-photos";
 import {
   clearZoneItems,
+  deleteZone,
   ensureActiveLayout,
   getPlace,
   listZoneItems,
   listZonesForPlace,
   publishZone,
   removeZoneItem,
+  renameZone,
   setZoneItems,
   upsertZone,
   type ZoneItemInput,
@@ -266,6 +268,107 @@ export async function clearMapperZoneItems(input: {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Clear zone failed",
+    };
+  }
+}
+
+/** Create or ensure a zone exists (empty OK) so it can be loaded as active. */
+export async function saveMapperZone(input: {
+  place_id: string;
+  zone_type: string;
+  zone_label: string;
+}): Promise<
+  | {
+      ok: true;
+      zone: { id: string; zone_type: string; zone_label: string };
+      zones: ZoneListRow[];
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const { place, layout_version_id } = await loadPlaceTeam(input.place_id);
+    const zone = await upsertZone({
+      team_id: place.team_id,
+      layout_version_id,
+      zone_type: input.zone_type,
+      zone_label: input.zone_label,
+    });
+    const { zones } = await listZonesForPlace(input.place_id);
+    return {
+      ok: true,
+      zone: {
+        id: zone.id,
+        zone_type: zone.zone_type,
+        zone_label: zone.zone_label,
+      },
+      zones,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Save zone failed",
+    };
+  }
+}
+
+export async function renameMapperZone(input: {
+  place_id: string;
+  zone_id: string;
+  zone_type: string;
+  zone_label: string;
+}): Promise<
+  | {
+      ok: true;
+      zone: { id: string; zone_type: string; zone_label: string };
+      zones: ZoneListRow[];
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const place = await getPlace(input.place_id);
+    const zone = await renameZone({
+      team_id: place.team_id,
+      zone_id: input.zone_id,
+      zone_type: input.zone_type,
+      zone_label: input.zone_label,
+    });
+    // Keep published title in sync when possible
+    try {
+      await publishZone({ team_id: place.team_id, zone_id: zone.id });
+    } catch {
+      // empty zones may not publish — rename still succeeded
+    }
+    const { zones } = await listZonesForPlace(input.place_id);
+    return {
+      ok: true,
+      zone: {
+        id: zone.id,
+        zone_type: zone.zone_type,
+        zone_label: zone.zone_label,
+      },
+      zones,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Rename zone failed",
+    };
+  }
+}
+
+export async function deleteMapperZone(input: {
+  place_id: string;
+  zone_id: string;
+}): Promise<{ ok: true; zones: ZoneListRow[] } | { ok: false; error: string }> {
+  try {
+    const place = await getPlace(input.place_id);
+    await deleteZone({ team_id: place.team_id, zone_id: input.zone_id });
+    const { zones } = await listZonesForPlace(input.place_id);
+    return { ok: true, zones };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Delete zone failed",
     };
   }
 }

@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth/mapper-auth";
 import {
   beginCaptureAssetUpload,
-  listCaptureAssets,
+  listCaptureAssetsWithUrls,
 } from "@/lib/supabase/capture-store";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: Params) {
   }
   const { setId } = await params;
   try {
-    const assets = await listCaptureAssets(setId);
+    const assets = await listCaptureAssetsWithUrls(setId);
     return NextResponse.json({ ok: true, assets });
   } catch (e) {
     return NextResponse.json(
