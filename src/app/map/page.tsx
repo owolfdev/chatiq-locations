@@ -31,6 +31,8 @@ export default async function MapPage({ searchParams }: Props) {
           padding: "1.25rem",
           maxWidth: 520,
           margin: "0 auto",
+          /* Extra top room so the place title clears mobile URL/toolbar chrome */
+          paddingTop: "calc(1.25rem + 12px)",
           paddingBottom: "3rem",
         }}
       >
