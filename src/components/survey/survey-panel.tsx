@@ -346,7 +346,7 @@ export function SurveyPanel(props: Props) {
 
       {activeSet && activeSet.status === "open" ? (
         <div style={{ marginTop: 12 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 14 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 15 }}>
             Open: <strong>{activeSet.zone_type} {activeSet.zone_label}</strong> ·{" "}
             {activeSet.asset_count}/{MAX_ASSETS_PER_CAPTURE_SET} photos
           </p>
@@ -396,12 +396,12 @@ export function SurveyPanel(props: Props) {
       ) : null}
 
       {error ? (
-        <p style={{ color: "#b71c1c", margin: "10px 0 0", fontSize: 13 }}>
+        <p style={{ color: "#b71c1c", margin: "10px 0 0", fontSize: 15 }}>
           {error}
         </p>
       ) : null}
       {status ? (
-        <p style={{ color: "#1b5e20", margin: "10px 0 0", fontSize: 13 }}>
+        <p style={{ color: "#1b5e20", margin: "10px 0 0", fontSize: 15 }}>
           {status}
         </p>
       ) : null}
@@ -418,7 +418,7 @@ export function SurveyPanel(props: Props) {
                 style={{
                   borderTop: "1px solid #eee",
                   padding: "10px 0",
-                  fontSize: 13,
+                  fontSize: 15,
                 }}
               >
                 <div
@@ -529,19 +529,19 @@ const card: CSSProperties = {
 
 const label: CSSProperties = {
   display: "block",
-  fontSize: 13,
+  fontSize: 15,
   fontWeight: 600,
   marginBottom: 6,
 };
 
 const hint: CSSProperties = {
   margin: "6px 0 0",
-  fontSize: 12,
+  fontSize: 14,
   color: "#777",
 };
 
 const primaryBtn: CSSProperties = {
-  fontSize: 14,
+  fontSize: 16,
   padding: "8px 12px",
   borderRadius: 8,
   border: "none",
@@ -551,7 +551,7 @@ const primaryBtn: CSSProperties = {
 };
 
 const secondaryBtn: CSSProperties = {
-  fontSize: 14,
+  fontSize: 16,
   padding: "8px 12px",
   borderRadius: 8,
   border: "1px solid #ccc",
@@ -563,6 +563,6 @@ const linkBtn: CSSProperties = {
   border: "none",
   background: "none",
   color: "#0b5fff",
-  fontSize: 13,
+  fontSize: 15,
   padding: 0,
 };

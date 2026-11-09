@@ -610,9 +610,9 @@ export function MapperClient(props: Props) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <header>
         <p style={eyebrow}>Store mapper</p>
-        <h1 style={{ margin: "0 0 4px", fontSize: "1.6rem" }}>{props.placeName}</h1>
+        <h1 style={{ margin: "0 0 4px", fontSize: "1.75rem" }}>{props.placeName}</h1>
         {props.placeAddress ? (
-          <p style={{ margin: 0, color: "#666", fontSize: 14 }}>{props.placeAddress}</p>
+          <p style={{ margin: 0, color: "#666", fontSize: 15 }}>{props.placeAddress}</p>
         ) : null}
       </header>
 
@@ -635,7 +635,7 @@ export function MapperClient(props: Props) {
                 top: 4,
                 left: "50%",
                 transform: "translateX(-50%)",
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
@@ -657,7 +657,7 @@ export function MapperClient(props: Props) {
               }}
             />
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 15, lineHeight: 1.5 }}>
             <div>
               <strong>{cardinal(heading)}</strong>
               {heading != null ? ` · ${Math.round(heading)}°` : " · compass pending"}
@@ -670,7 +670,7 @@ export function MapperClient(props: Props) {
                     : "")
                 : poseError || "Waiting for GPS…"}
             </div>
-            <div style={{ color: "#888", fontSize: 12 }}>
+            <div style={{ color: "#888", fontSize: 14 }}>
               Optional — capture never blocked if missing
             </div>
           </div>
@@ -717,7 +717,7 @@ export function MapperClient(props: Props) {
             flexWrap: "wrap",
             gap: 12,
             marginTop: 8,
-            fontSize: 13,
+            fontSize: 15,
             alignItems: "center",
           }}
         >
@@ -858,7 +858,7 @@ export function MapperClient(props: Props) {
                     display: "flex",
                     justifyContent: "space-between",
                     gap: 8,
-                    fontSize: 13,
+                    fontSize: 15,
                     marginBottom: 6,
                   }}
                 >
@@ -923,8 +923,12 @@ export function MapperClient(props: Props) {
         }}
       />
 
-      {error ? <p style={{ color: "#b71c1c", margin: 0 }}>{error}</p> : null}
-      {status ? <p style={{ color: "#1b5e20", margin: 0 }}>{status}</p> : null}
+      {error ? (
+        <p style={{ color: "#b71c1c", margin: 0, fontSize: 15 }}>{error}</p>
+      ) : null}
+      {status ? (
+        <p style={{ color: "#1b5e20", margin: 0, fontSize: 15 }}>{status}</p>
+      ) : null}
 
       <section style={card}>
         <div
@@ -976,7 +980,7 @@ export function MapperClient(props: Props) {
               marginBottom: 8,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: "1.1rem" }}>
+            <h2 style={{ margin: 0, fontSize: "1.25rem" }}>
               Inspect · {inspectZone.zone_type} {inspectZone.zone_label}
             </h2>
             <button
@@ -988,7 +992,7 @@ export function MapperClient(props: Props) {
               Clear all
             </button>
           </div>
-          <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, fontSize: 14 }}>
+          <ul style={{ listStyle: "none", margin: "0 0 12px", padding: 0, fontSize: 16 }}>
             {inspectItems.length === 0 ? (
               <li style={{ color: "#666", padding: "6px 0" }}>No items yet</li>
             ) : (
@@ -1042,7 +1046,7 @@ export function MapperClient(props: Props) {
 
 const eyebrow: CSSProperties = {
   margin: 0,
-  fontSize: 12,
+  fontSize: 13,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "#888",
@@ -1057,19 +1061,19 @@ const card: CSSProperties = {
 
 const label: CSSProperties = {
   display: "block",
-  fontSize: 13,
+  fontSize: 15,
   fontWeight: 600,
   marginBottom: 6,
 };
 
 const hint: CSSProperties = {
   margin: "6px 0 0",
-  fontSize: 12,
+  fontSize: 14,
   color: "#777",
 };
 
 const input: CSSProperties = {
-  fontSize: 16,
+  fontSize: 17,
   padding: "10px 12px",
   borderRadius: 8,
   border: "1px solid #ccc",
@@ -1077,7 +1081,7 @@ const input: CSSProperties = {
 };
 
 const primaryBtn: CSSProperties = {
-  fontSize: 15,
+  fontSize: 16,
   padding: "10px 14px",
   borderRadius: 8,
   border: "none",
@@ -1087,7 +1091,7 @@ const primaryBtn: CSSProperties = {
 };
 
 const secondaryBtn: CSSProperties = {
-  fontSize: 15,
+  fontSize: 16,
   padding: "10px 14px",
   borderRadius: 8,
   border: "1px solid #ccc",
@@ -1099,7 +1103,7 @@ const linkBtn: CSSProperties = {
   border: "none",
   background: "none",
   color: "#0b5fff",
-  fontSize: 13,
+  fontSize: 15,
   padding: 0,
 };
 
@@ -1112,5 +1116,5 @@ const zoneRow: CSSProperties = {
   borderBottom: "1px solid #eee",
   background: "transparent",
   textAlign: "left",
-  fontSize: 14,
+  fontSize: 16,
 };
