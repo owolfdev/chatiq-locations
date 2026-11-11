@@ -1,6 +1,6 @@
 # Photo sets + active zone (mapper)
 
-Last updated: 2026-11-10  
+Last updated: 2026-11-12  
 Status: **Implemented** (album UX) — apply SQL migration if not already  
 Parent: [`operator-input-and-hosting.md`](./operator-input-and-hosting.md)
 
@@ -9,6 +9,7 @@ Parent: [`operator-input-and-hosting.md`](./operator-input-and-hosting.md)
 1. **Active zone** — the aisle/section that receives Add / Replace & publish. Load from the zone list, or type + Save / Rename / Delete.
 2. **Images** — one section for live photos and named **sets** (albums).  
    Buttons: Take photo · Add from library · Load set · Save set (· Save as…).  
+   **Take photo** opens an in-page camera that stays up between shots. Each shutter press is added to the grid immediately (up to 24). **0.5 / 1 / 2** and pinch use the phone’s zoom when it reports those lenses, and the camera opens at **0.5** when that lens exists. If the browser cannot open a live camera, Take photo falls back to the system camera (one shot, then it closes).  
    Tap a thumbnail to view; **×** removes (confirm).  
    **Process photos** runs vision live into Text/speak for the active zone — same path whether the grid was shot now or loaded from a set.
 3. Sets are **named bags of photos** in Storage. They are not auto-processed in the background in the current UI (legacy extract-job APIs/cron remain for optional reuse).

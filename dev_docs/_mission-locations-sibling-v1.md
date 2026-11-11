@@ -1,6 +1,6 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-10  
+Last updated: 2026-11-12  
 Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: deploy album UI; LLM normalize.
 
 Owner: Engineering
@@ -21,7 +21,7 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-10):** Deploy album mapper UX; smoke **Active zone** (save/load/rename/delete) + **Images** (save/load set → Process → Add/Replace). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+**Next action (2026-11-12):** Phone-smoke the in-page aisle camera (stays open, 0.5 default, 24 shots). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
 
 ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_token`). Sibling: `OPENAI_API_KEY`, same service/mapper token.
 
@@ -94,6 +94,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-12 — In-page aisle camera
+
+**What changed:** Take photo opens a viewfinder that stays up. Each shutter press lands in the Images grid with no Use image step, up to 24. Lens buttons 0.5 / 1 / 2 plus pinch; opens at 0.5 when the phone reports that zoom. System camera remains the fallback. Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+
+**Next:** Phone-smoke an aisle walk: rapid shots, 0.5 start, pinch, Done, then Process.
+
+```text
+chatiq-locations: [####################] ~96% -> Phone-smoke continuous camera
+```
 
 ### 2026-11-10 — Album Images + Active zone mapper UX
 

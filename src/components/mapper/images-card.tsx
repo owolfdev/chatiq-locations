@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 
+import { LiveCameraSheet } from "@/components/mapper/live-camera-sheet";
 import {
   hasMapperToken,
   mapperAuthHeaders,
@@ -64,6 +65,7 @@ export function ImagesCard(props: Props) {
   const [selectedSetId, setSelectedSetId] = useState("");
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<PhotoItem | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef(photos);
@@ -93,20 +95,26 @@ export function ImagesCard(props: Props) {
     void refreshSets();
   }, [refreshSets]);
 
-  function addFiles(files: FileList | null) {
-    if (!files?.length) return;
-    const next = Array.from(files).map((file) => ({
+  function addFileList(files: File[]) {
+    if (!files.length) return;
+    const next = files.map((file) => ({
       id: newLocalId(),
       file,
       url: URL.createObjectURL(file),
     }));
     setPhotos((prev) => {
-      const merged = [...prev, ...next].slice(0, MAX_PROCESS_PHOTOS);
-      for (const p of prev) {
-        if (!merged.includes(p)) URL.revokeObjectURL(p.url);
+      const room = MAX_PROCESS_PHOTOS - prev.length;
+      const accepted = next.slice(0, Math.max(0, room));
+      for (const skipped of next.slice(accepted.length)) {
+        URL.revokeObjectURL(skipped.url);
       }
-      return merged;
+      return [...prev, ...accepted];
     });
+  }
+
+  function addFiles(files: FileList | null) {
+    if (!files?.length) return;
+    addFileList(Array.from(files));
   }
 
   function clearLocalPhotos() {
@@ -496,7 +504,14 @@ export function ImagesCard(props: Props) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button
           type="button"
-          onClick={() => cameraRef.current?.click()}
+          onClick={() => {
+            if (!navigator.mediaDevices?.getUserMedia) {
+              cameraRef.current?.click();
+              return;
+            }
+            props.onError(null);
+            setCameraOpen(true);
+          }}
           disabled={disabled}
           style={primaryBtn}
         >
@@ -672,6 +687,20 @@ export function ImagesCard(props: Props) {
           zone.
         </p>
       )}
+
+      <LiveCameraSheet
+        open={cameraOpen}
+        shotCount={photos.length}
+        maxShots={MAX_PROCESS_PHOTOS}
+        latestPreviewUrl={photos[photos.length - 1]?.url ?? null}
+        onCapture={(file) => addFileList([file])}
+        onClose={() => setCameraOpen(false)}
+        onUnavailable={(message) => {
+          setCameraOpen(false);
+          props.onError(message);
+          cameraRef.current?.click();
+        }}
+      />
 
       {detail ? (
         <div
