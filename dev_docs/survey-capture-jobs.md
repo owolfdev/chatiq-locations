@@ -29,7 +29,7 @@ Mapper set upload/load APIs require `Authorization: Bearer <LOCATIONS_MAPPER_TOK
 
 - Bucket: `locations-capture` (private)
 - Path: `{team_id}/{place_id}/{set_id}/{asset_id}.jpg`
-- Cap: **24** assets per set · Process UI cap: `MAX_PROCESS_PHOTOS`
+- Cap: **24** assets per set · Process UI cap: **24** (`MAX_PROCESS_PHOTOS`)
 
 ## Flow
 
