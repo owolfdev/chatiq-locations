@@ -1,6 +1,6 @@
 # What’s next — `chatiq-locations`
 
-Last updated: 2026-11-07
+Last updated: 2026-11-13
 
 **Start here for this repo.** Mission: [`dev_docs/_mission-locations-sibling-v1.md`](./dev_docs/_mission-locations-sibling-v1.md).  
 Principles: [`dev_docs/organic-mapping.md`](./dev_docs/organic-mapping.md) · **Input/hosting (locked):** [`dev_docs/operator-input-and-hosting.md`](./dev_docs/operator-input-and-hosting.md) · Salvage: [`dev_docs/locations-salvage.md`](./dev_docs/locations-salvage.md) · Commands: [`dev_docs/locations-command-library.md`](./dev_docs/locations-command-library.md).
@@ -13,7 +13,7 @@ Local: `npm run dev` → **port 3004**. Env: [`.env.example`](./.env.example) (`
 
 Operators map a store **organically** (place → zones/items anytime, multi-agent). Shoppers get honest place-scoped “where is X?” from **published** knowledge. Vision accelerates mapping; it is not required for a first useful publish.
 
-**Hosting:** ChatIQ = control plane (`locations_mode`, **bound place** picker, “Open mapper” link). Sibling = mapper UI + all ingest/vision/publish engines. See [`operator-input-and-hosting.md`](./dev_docs/operator-input-and-hosting.md).
+**Hosting:** ChatIQ = control plane (`locations_mode`, **bound place** picker, “Open mapper” link). Sibling = PWA mapper (ChatIQ login, team store list, aisle capture). See [`operator-input-and-hosting.md`](./dev_docs/operator-input-and-hosting.md).
 
 ## Phased plan
 
@@ -53,7 +53,8 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | Sibling: camera batch queue (vision process next) | ✅ UI 2026-11-07; extract ✅ 2026-11-08 |
 | Mapper: add / remove / clear / replace zone items | ✅ 2026-11-07 |
 | Ingest: heuristic normalize → upsert/publish (LLM normalize next) | ✅ heuristic 2026-11-07 |
-| Sibling: auth (shared session or handoff) | Not started |
+| **Field day:** PWA + ChatIQ login pass + team store dropdown | ✅ code 2026-11-13; phone-smoke open |
+| Sibling: auth when `MAPPER_SESSION_SECRET` is set (team-scoped map + survey) | ✅ 2026-11-13 |
 
 ### Phase 2 — Extraction salvage
 
@@ -94,5 +95,5 @@ Geo place pick · recipe shopping · field-level review UI · native App Store c
 ## Progress snapshot
 
 ```text
-chatiq-locations: sibling v1: [###################_] ~94% -> Apply capture migration + LLM normalize
+chatiq-locations: sibling v1: [###################_] ~96% -> Phone-smoke field-day login + server extract
 ```

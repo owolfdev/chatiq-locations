@@ -1,6 +1,8 @@
 "use server";
 
 import { normalizeIngestText } from "@/lib/ingest/normalize-text";
+import { guardPlace, guardZone } from "@/lib/auth/mapper-place-guard";
+import { getMapperSessionSecret } from "@/lib/auth/mapper-session";
 import {
   processMapperPhotosCore,
   type ProcessPhotosResult,
@@ -61,6 +63,8 @@ export async function refreshMapperZones(place_id: string): Promise<{
   layout_version_id: string | null;
 } | { ok: false; error: string }> {
   try {
+    const denied = await guardPlace(place_id);
+    if (denied) return { ok: false, error: denied };
     const { layout_version_id, zones } = await listZonesForPlace(place_id);
     return { ok: true, zones, layout_version_id };
   } catch (e) {
@@ -76,6 +80,8 @@ export async function fetchZoneInventory(zone_id: string): Promise<{
   items: ZoneItemRow[];
 } | { ok: false; error: string }> {
   try {
+    const denied = await guardZone(zone_id);
+    if (denied) return { ok: false, error: denied };
     const items = await listZoneItems(zone_id);
     return { ok: true, items };
   } catch (e) {
@@ -97,6 +103,8 @@ export async function applyMapperText(input: {
   pose?: MapperPose | null;
 }): Promise<ApplyTextResult> {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const normalized = normalizeIngestText({
       text: input.text,
       sticky_zone_type: input.sticky_zone_type,
@@ -191,6 +199,8 @@ export async function addMapperItem(input: {
   | { ok: false; error: string }
 > {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const name = input.item_name.trim();
     if (!name) return { ok: false, error: "Item name required" };
     const place = await getPlace(input.place_id);
@@ -223,6 +233,8 @@ export async function removeMapperItem(input: {
   | { ok: false; error: string }
 > {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const place = await getPlace(input.place_id);
     const result = await removeZoneItem({
       team_id: place.team_id,
@@ -254,6 +266,8 @@ export async function clearMapperZoneItems(input: {
   | { ok: false; error: string }
 > {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const place = await getPlace(input.place_id);
     const result = await clearZoneItems({
       team_id: place.team_id,
@@ -286,6 +300,8 @@ export async function saveMapperZone(input: {
   | { ok: false; error: string }
 > {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const { place, layout_version_id } = await loadPlaceTeam(input.place_id);
     const zone = await upsertZone({
       team_id: place.team_id,
@@ -325,6 +341,8 @@ export async function renameMapperZone(input: {
   | { ok: false; error: string }
 > {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const place = await getPlace(input.place_id);
     const zone = await renameZone({
       team_id: place.team_id,
@@ -361,6 +379,8 @@ export async function deleteMapperZone(input: {
   zone_id: string;
 }): Promise<{ ok: true; zones: ZoneListRow[] } | { ok: false; error: string }> {
   try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
     const place = await getPlace(input.place_id);
     await deleteZone({ team_id: place.team_id, zone_id: input.zone_id });
     const { zones } = await listZonesForPlace(input.place_id);
@@ -377,5 +397,11 @@ export async function deleteMapperZone(input: {
 export async function processMapperPhotos(
   formData: FormData
 ): Promise<ProcessPhotosResult> {
+  const placeId = String(formData.get("place_id") || "").trim();
+  if (getMapperSessionSecret()) {
+    if (!placeId) return { ok: false, error: "Sign in required" };
+    const denied = await guardPlace(placeId);
+    if (denied) return { ok: false, error: denied };
+  }
   return processMapperPhotosCore(formData);
 }

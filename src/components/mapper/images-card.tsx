@@ -10,10 +10,11 @@ import {
 
 import { LiveCameraSheet } from "@/components/mapper/live-camera-sheet";
 import {
-  hasMapperToken,
   mapperAuthHeaders,
+  readMapperToken,
 } from "@/lib/survey/mapper-token-client";
 import { MAX_ASSETS_PER_CAPTURE_SET } from "@/lib/supabase/tables";
+import { compressImageForUpload } from "@/lib/vision/compress-image-client";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
 
 type PhotoItem = {
@@ -29,6 +30,18 @@ type CaptureSet = {
   zone_label: string;
   status: string;
   asset_count: number;
+  draft_text: string | null;
+  created_at: string;
+};
+
+type ExtractJob = {
+  id: string;
+  set_id: string;
+  status: string;
+  images_total: number;
+  images_done: number;
+  failure_reason: string | null;
+  draft_text: string | null;
   created_at: string;
 };
 
@@ -44,12 +57,17 @@ export type ImagesExtractProgress = {
 type Props = {
   placeId: string;
   zoneReady: boolean;
+  zoneType: string;
+  zoneLabel: string;
   extractProgress: ImagesExtractProgress | null;
   pending: boolean;
   /** Resolves true when a draft was produced. */
   onProcess: (files: File[]) => Promise<boolean>;
+  onDraft: (draft: { text: string; zoneType: string; zoneLabel: string }) => void;
   onStatus: (msg: string | null) => void;
   onError: (msg: string | null) => void;
+  /** Signed-in mapper: survey calls use the session cookie. */
+  sessionUploads?: boolean;
 };
 
 function newLocalId() {
@@ -66,6 +84,16 @@ export function ImagesCard(props: Props) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<PhotoItem | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [retrySetId, setRetrySetId] = useState<string | null>(null);
+  const appliedJobIds = useRef(new Set<string>());
+  const canSurvey = Boolean(props.sessionUploads) || readMapperToken().length > 0;
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onDraftRef = useRef(props.onDraft);
+  const onStatusRef = useRef(props.onStatus);
+  const onErrorRef = useRef(props.onError);
+  onDraftRef.current = props.onDraft;
+  onStatusRef.current = props.onStatus;
+  onErrorRef.current = props.onError;
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef(photos);
@@ -78,7 +106,7 @@ export function ImagesCard(props: Props) {
   }, []);
 
   const refreshSets = useCallback(async () => {
-    if (!hasMapperToken()) return;
+    if (!canSurvey) return;
     const res = await fetch(
       `/api/survey/sets?place_id=${encodeURIComponent(props.placeId)}`,
       { headers: mapperAuthHeaders() }
@@ -89,11 +117,122 @@ export function ImagesCard(props: Props) {
       error?: string;
     };
     if (json.ok) setSets(json.sets || []);
-  }, [props.placeId]);
+  }, [canSurvey, props.placeId]);
 
   useEffect(() => {
     void refreshSets();
   }, [refreshSets]);
+
+  const applyJobUpdate = useCallback(
+    (job: ExtractJob, knownSets: CaptureSet[]) => {
+      const created = new Date(job.created_at).getTime();
+      if (Number.isFinite(created) && Date.now() - created > 7 * 24 * 60 * 60 * 1000) {
+        return false;
+      }
+      const set = knownSets.find((item) => item.id === job.set_id);
+      if (
+        (job.status === "draft_ready" || set?.status === "draft_ready") &&
+        job.draft_text?.trim() &&
+        !appliedJobIds.current.has(job.id)
+      ) {
+        appliedJobIds.current.add(job.id);
+        setRetrySetId(null);
+        onDraftRef.current({
+          text: job.draft_text,
+          zoneType: set?.zone_type || props.zoneType,
+          zoneLabel: set?.zone_label || props.zoneLabel,
+        });
+        onStatusRef.current(
+          "Draft is in Text/speak. Review it, then Add or Replace. Nothing is published yet."
+        );
+        return false;
+      }
+      if (job.status === "failed" && !appliedJobIds.current.has(`fail:${job.id}`)) {
+        appliedJobIds.current.add(`fail:${job.id}`);
+        setRetrySetId(job.set_id);
+        onErrorRef.current(
+          job.failure_reason ||
+            "Extract failed. Retry uses the saved photos."
+        );
+        return false;
+      }
+      if (job.status === "queued" || job.status === "running") {
+        onStatusRef.current(
+          `Processing on the server · ${job.images_done}/${job.images_total}. You can leave this page. The draft loads here when you come back.`
+        );
+        return true;
+      }
+      return false;
+    },
+    [props.zoneLabel, props.zoneType]
+  );
+
+  const watchLatestJob = useCallback(async () => {
+    if (!canSurvey) return;
+    const [jobsRes, setsRes] = await Promise.all([
+      fetch(
+        `/api/survey/jobs?place_id=${encodeURIComponent(props.placeId)}`,
+        { headers: mapperAuthHeaders() }
+      ),
+      fetch(
+        `/api/survey/sets?place_id=${encodeURIComponent(props.placeId)}`,
+        { headers: mapperAuthHeaders() }
+      ),
+    ]);
+    const jobsJson = (await jobsRes.json()) as {
+      ok: boolean;
+      jobs?: ExtractJob[];
+    };
+    const setsJson = (await setsRes.json()) as {
+      ok: boolean;
+      sets?: CaptureSet[];
+    };
+    if (setsJson.ok && setsJson.sets) setSets(setsJson.sets);
+    const job = jobsJson.jobs?.[0];
+    if (!job) return;
+    const keepPolling = applyJobUpdate(job, setsJson.sets || []);
+    if (keepPolling) {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      pollTimer.current = setTimeout(() => {
+        void watchLatestJob();
+      }, 5000);
+    }
+  }, [applyJobUpdate, canSurvey, props.placeId]);
+
+  useEffect(() => {
+    void watchLatestJob();
+    return () => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+    };
+  }, [watchLatestJob]);
+
+  async function kickExtractQueue() {
+    await fetch("/api/cron/extract-tick", {
+      method: "POST",
+      headers: mapperAuthHeaders(),
+    });
+  }
+
+  async function enqueueSet(setId: string) {
+    const res = await fetch(`/api/survey/sets/${setId}/extract`, {
+      method: "POST",
+      headers: mapperAuthHeaders(),
+    });
+    const json = (await res.json()) as {
+      ok: boolean;
+      job?: ExtractJob;
+      error?: string;
+    };
+    if (!json.ok || !json.job) {
+      throw new Error(json.error || "Could not queue extract");
+    }
+    try {
+      await kickExtractQueue();
+    } catch {
+      /* the minute cron continues the queue if this kick fails */
+    }
+    return json.job;
+  }
 
   function addFileList(files: File[]) {
     if (!files.length) return;
@@ -127,7 +266,7 @@ export function ImagesCard(props: Props) {
 
   async function removePhoto(photo: PhotoItem) {
     if (!window.confirm("Remove this photo from the set?")) return;
-    if (photo.assetId && hasMapperToken()) {
+    if (photo.assetId && canSurvey) {
       setBusy(true);
       try {
         const res = await fetch(`/api/survey/assets/${photo.assetId}`, {
@@ -193,9 +332,9 @@ export function ImagesCard(props: Props) {
   }
 
   async function saveSet(asNew: boolean) {
-    if (!hasMapperToken()) {
+    if (!canSurvey) {
       props.onError(
-        "Open mapper with access_token to save photo sets (same as LOCATIONS_MAPPER_TOKEN)."
+        "Sign in to save photo sets."
       );
       return;
     }
@@ -289,8 +428,8 @@ export function ImagesCard(props: Props) {
   }
 
   async function loadSet(set: CaptureSet) {
-    if (!hasMapperToken()) {
-      props.onError("access_token required to load sets");
+    if (!canSurvey) {
+      props.onError("Sign in to load sets");
       return;
     }
     setBusy(true);
@@ -407,8 +546,25 @@ export function ImagesCard(props: Props) {
     await deleteSetById(id, name);
   }
 
+  async function retryExtract() {
+    if (!retrySetId) return;
+    setBusy(true);
+    props.onError(null);
+    try {
+      await enqueueSet(retrySetId);
+      props.onStatus(
+        "Retry queued. You can leave this page. The draft loads into Text/speak when it is ready."
+      );
+      void watchLatestJob();
+    } catch (e) {
+      props.onError(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runProcess() {
-    if (!props.zoneReady) {
+    if (!props.zoneReady || !props.zoneLabel.trim()) {
       props.onError("Load or set an active zone before processing photos");
       return;
     }
@@ -416,16 +572,61 @@ export function ImagesCard(props: Props) {
       props.onError("Add or load at least one photo");
       return;
     }
-    const setId = loadedSetId;
-    const setName = loadedSetName;
-    const ok = await props.onProcess(photos.map((p) => p.file));
-    if (!ok || !setId || !setName) return;
-    if (
-      window.confirm(
-        `Draft ready. Delete set “${setName}” and its photos from storage? You can keep it if you want to re-process later.`
-      )
-    ) {
-      await deleteSetById(setId, setName);
+    if (!canSurvey) {
+      await props.onProcess(photos.map((p) => p.file));
+      return;
+    }
+
+    setBusy(true);
+    props.onError(null);
+    try {
+      const res = await fetch("/api/survey/sets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...mapperAuthHeaders(),
+        },
+        body: JSON.stringify({
+          place_id: props.placeId,
+          zone_type: props.zoneType,
+          zone_label: props.zoneLabel.trim(),
+        }),
+      });
+      const created = (await res.json()) as {
+        ok: boolean;
+        set?: CaptureSet;
+        error?: string;
+      };
+      if (!created.ok || !created.set) {
+        throw new Error(created.error || "Could not save photos");
+      }
+      const setId = created.set.id;
+      for (let i = 0; i < photos.length; i++) {
+        props.onStatus(`Uploading photo ${i + 1} of ${photos.length}…`);
+        const file = await compressImageForUpload(photos[i].file);
+        await uploadPhotoToSet(setId, file);
+      }
+      const closed = await fetch(`/api/survey/sets/${setId}/close`, {
+        method: "POST",
+        headers: mapperAuthHeaders(),
+      });
+      const closedJson = (await closed.json()) as { ok: boolean; error?: string };
+      if (!closedJson.ok) {
+        throw new Error(closedJson.error || "Could not close photo set");
+      }
+      await enqueueSet(setId);
+      setLoadedSetId(setId);
+      setLoadedSetName(created.set.zone_label);
+      setSelectedSetId(setId);
+      await refreshSets();
+      props.onStatus(
+        `Queued ${photos.length} photo(s) for ${props.zoneType} ${props.zoneLabel}. You can leave this page. The draft loads into Text/speak when you come back.`
+      );
+      void watchLatestJob();
+    } catch (e) {
+      props.onError(e instanceof Error ? e.message : "Process failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -443,16 +644,16 @@ export function ImagesCard(props: Props) {
         <select
           value={selectedSetId}
           onChange={(e) => void onSetSelectChange(e.target.value)}
-          disabled={disabled || !hasMapperToken()}
+          disabled={disabled || !canSurvey}
           style={{ ...input, flex: 1, minWidth: 160 }}
           aria-label="Photo set"
         >
           <option value="">
-            {hasMapperToken()
+            {canSurvey
               ? sets.length
                 ? "Select a photo set…"
                 : "No saved sets yet"
-              : "access_token required for sets"}
+              : "Sign in to use photo sets"}
           </option>
           {sets.map((s) => (
             <option key={s.id} value={s.id}>
@@ -463,7 +664,7 @@ export function ImagesCard(props: Props) {
         <button
           type="button"
           onClick={() => void refreshSets()}
-          disabled={disabled || !hasMapperToken()}
+          disabled={disabled || !canSurvey}
           style={secondaryBtn}
         >
           Refresh
@@ -630,7 +831,7 @@ export function ImagesCard(props: Props) {
             disabled={disabled}
             style={{ ...secondaryBtn, marginTop: 8 }}
           >
-            {props.extractProgress ? "Processing…" : "Process photos"}
+            {busy ? "Uploading…" : props.extractProgress ? "Processing…" : "Process photos"}
           </button>
           {props.extractProgress ? (
             <div style={{ marginTop: 12 }} role="status" aria-live="polite">
@@ -687,6 +888,17 @@ export function ImagesCard(props: Props) {
           zone.
         </p>
       )}
+
+      {retrySetId ? (
+        <button
+          type="button"
+          onClick={() => void retryExtract()}
+          disabled={disabled}
+          style={{ ...secondaryBtn, marginTop: 8 }}
+        >
+          Retry extract
+        </button>
+      ) : null}
 
       <LiveCameraSheet
         open={cameraOpen}

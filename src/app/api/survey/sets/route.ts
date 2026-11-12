@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  bearerFromRequest,
-  requireMapperAuth,
-} from "@/lib/auth/mapper-auth";
+import { denyUnlessMapperScope } from "@/lib/auth/mapper-gate";
 import {
   createCaptureSet,
   listCaptureSets,
@@ -13,9 +10,6 @@ import { LocationsStoreError } from "@/lib/supabase/store";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const place_id = new URL(request.url).searchParams.get("place_id")?.trim();
   if (!place_id) {
     return NextResponse.json(
@@ -23,6 +17,8 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   }
+  const denied = await denyUnlessMapperScope(request, { placeId: place_id });
+  if (denied) return denied;
   try {
     const sets = await listCaptureSets(place_id);
     return NextResponse.json({ ok: true, sets });
@@ -34,9 +30,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   try {
     const body = (await request.json()) as {
       place_id?: string;
@@ -53,6 +46,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    const denied = await denyUnlessMapperScope(request, {
+      placeId: body.place_id.trim(),
+    });
+    if (denied) return denied;
     const set = await createCaptureSet({
       place_id: body.place_id.trim(),
       zone_type: body.zone_type || "album",

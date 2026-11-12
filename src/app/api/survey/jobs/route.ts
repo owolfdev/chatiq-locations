@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
 
-import {
-  bearerFromRequest,
-  requireMapperAuth,
-} from "@/lib/auth/mapper-auth";
+import { denyUnlessMapperScope } from "@/lib/auth/mapper-gate";
 import { listExtractJobsForPlace } from "@/lib/supabase/capture-store";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const place_id = new URL(request.url).searchParams.get("place_id")?.trim();
   if (!place_id) {
     return NextResponse.json(
@@ -19,6 +13,8 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   }
+  const denied = await denyUnlessMapperScope(request, { placeId: place_id });
+  if (denied) return denied;
   try {
     const jobs = await listExtractJobsForPlace(place_id);
     return NextResponse.json({ ok: true, jobs });

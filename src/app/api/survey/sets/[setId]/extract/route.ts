@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  bearerFromRequest,
-  requireMapperAuth,
-} from "@/lib/auth/mapper-auth";
+import { denyUnlessMapperScope } from "@/lib/auth/mapper-gate";
 import { enqueueExtractJob } from "@/lib/supabase/capture-store";
 
 export const runtime = "nodejs";
@@ -11,10 +8,9 @@ export const runtime = "nodejs";
 type Params = { params: Promise<{ setId: string }> };
 
 export async function POST(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     const job = await enqueueExtractJob(setId);
     return NextResponse.json({ ok: true, job });

@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  bearerFromRequest,
-  requireMapperAuth,
-} from "@/lib/auth/mapper-auth";
+import { denyUnlessMapperScope } from "@/lib/auth/mapper-gate";
 import {
   discardCaptureSet,
   getCaptureSet,
@@ -15,10 +12,9 @@ export const runtime = "nodejs";
 type Params = { params: Promise<{ setId: string }> };
 
 export async function GET(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     const set = await getCaptureSet(setId);
     return NextResponse.json({ ok: true, set });
@@ -31,10 +27,9 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 export async function PATCH(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     const body = (await request.json()) as { name?: string };
     if (!body.name?.trim()) {
@@ -54,10 +49,9 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     await discardCaptureSet(setId);
     return NextResponse.json({ ok: true });

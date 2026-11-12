@@ -97,16 +97,31 @@ Remaps: replace/clear publish immediately so shopper answers stay honest.
 
 Re-shoot beats archiving every pass.
 
-## ChatIQ control plane (next build)
+## ChatIQ control plane (shipped)
 
 1. Bot settings: keep `locations_mode`  
 2. **Bound place** dropdown of team places → write sibling bind (`primary_bot_id` + `place_bots`)  
 3. Link **Open store mapper** → sibling with place/team context  
 
-## Vision extract (next build)
+Binding a bot is rare. It chooses which store that bot’s shopper chat answers for.
+
+## Field day (2026-11-13)
+
+The mapper is a PWA (home-screen icon, standalone window). A mapper signs in with the ChatIQ account they already have. There is no second user record.
+
+1. The mapper login form posts email and password to the locations app.  
+2. The locations server calls ChatIQ `POST /api/locations/mapper-session` with the service token.  
+3. ChatIQ checks the password, resolves the team (`getUserTeamId`), and returns a signed pass `{ sub, team_id, exp }`.  
+4. The pass is an httpOnly cookie for 14 days. Both apps share `MAPPER_SESSION_SECRET`. Locations does not receive ChatIQ’s database keys.  
+5. Home screen lists that team’s places. A dropdown picks the store, then the aisle screen. Switching stores does not change bot binding.  
+6. While the secret is set, `/map` and mapper actions require the pass and refuse another team’s place. Survey uploads accept the pass or the existing shared mapper token.
+
+Env: `MAPPER_SESSION_SECRET` (same value on ChatIQ and locations), `CHATIQ_BASE_URL` on locations.
+
+## Vision extract (shipped)
 
 See [`vision-extract-next.md`](./vision-extract-next.md): OpenAI `gpt-5-mini` extract in sibling (2026-11-08); Process photos → Text/speak draft → Add/Replace. Not Google-first. Needs `OPENAI_API_KEY`.
 
 ## Out of scope here
 
-Geo “find nearest store” · live ERP stock truth · field-level review chrome · native App Store client (mobile web first)
+Geo “find nearest store” · live ERP stock truth · field-level review chrome · native App Store client (the phone client is the PWA)

@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  bearerFromRequest,
-  requireMapperAuth,
-} from "@/lib/auth/mapper-auth";
+import { denyUnlessMapperScope } from "@/lib/auth/mapper-gate";
 import {
   beginCaptureAssetUpload,
   listCaptureAssetsWithUrls,
@@ -14,10 +11,9 @@ export const runtime = "nodejs";
 type Params = { params: Promise<{ setId: string }> };
 
 export async function GET(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     const assets = await listCaptureAssetsWithUrls(setId);
     return NextResponse.json({ ok: true, assets });
@@ -31,10 +27,9 @@ export async function GET(request: Request, { params }: Params) {
 
 /** Begin signed upload for one compressed photo. */
 export async function POST(request: Request, { params }: Params) {
-  if (!requireMapperAuth(bearerFromRequest(request))) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
   const { setId } = await params;
+  const denied = await denyUnlessMapperScope(request, { setId });
+  if (denied) return denied;
   try {
     const body = (await request.json().catch(() => ({}))) as {
       content_type?: string;

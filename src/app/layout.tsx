@@ -1,16 +1,24 @@
 import type { Metadata, Viewport } from "next";
 
+import { RegisterPwa } from "@/components/register-pwa";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ChatIQ Locations",
-  description: "Isolated locations sibling — places, zones, publish, extraction",
+  title: "Store mapper",
+  description: "Map store aisles for your team",
+  applicationName: "ChatIQ Store Mapper",
+  appleWebApp: {
+    capable: true,
+    title: "Mapper",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -20,7 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <RegisterPwa />
+        {children}
+      </body>
     </html>
   );
 }

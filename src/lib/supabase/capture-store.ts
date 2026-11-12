@@ -641,6 +641,22 @@ function mergeDraftTexts(drafts: string[]): string {
   return `${zonePrefix}. ${Array.from(items).join(", ")}`;
 }
 
+/** A killed invocation can leave a photo stuck on "running". */
+const STALE_RUNNING_MS = 90_000;
+
+async function releaseStaleRunningExtracts() {
+  const supabase = client();
+  const cutoff = new Date(Date.now() - STALE_RUNNING_MS).toISOString();
+  await supabase
+    .from(LOCATIONS_TABLES.captureAssets)
+    .update({
+      extract_status: "pending",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("extract_status", "running")
+    .lt("updated_at", cutoff);
+}
+
 /**
  * Process at most one pending asset for any running/queued job.
  * Designed for short serverless invocations (cron tick).
@@ -806,6 +822,38 @@ export async function tickExtractQueue(): Promise<{
       message: `Asset failed (${message}); continuing`,
     };
   }
+}
+
+/**
+ * Extract as many pending photos as fit in one Vercel run.
+ * `more` means the queue is still running and another run should start.
+ */
+export async function runExtractBudget(budgetMs = 45_000): Promise<{
+  processed: boolean;
+  more: boolean;
+  steps: number;
+  job_id?: string;
+  asset_id?: string;
+  status?: string;
+  message: string;
+}> {
+  await releaseStaleRunningExtracts();
+  const deadline = Date.now() + budgetMs;
+  let last = await tickExtractQueue();
+  let steps = last.processed ? 1 : 0;
+  while (
+    last.processed &&
+    last.status === "running" &&
+    Date.now() < deadline
+  ) {
+    last = await tickExtractQueue();
+    if (last.processed) steps += 1;
+  }
+  return {
+    ...last,
+    steps,
+    more: Boolean(last.processed && last.status === "running"),
+  };
 }
 
 async function finalizeExtractJob(

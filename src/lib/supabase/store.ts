@@ -338,6 +338,21 @@ export async function getPlace(place_id: string): Promise<PlaceRow> {
   return data as PlaceRow;
 }
 
+export async function getZone(zone_id: string): Promise<ZoneRow | null> {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.zones)
+    .select(
+      "id, team_id, place_id, layout_version_id, zone_type, zone_label, zone_description, near_landmark, placement_note, is_active"
+    )
+    .eq("id", zone_id)
+    .maybeSingle();
+  if (error) {
+    throw new LocationsStoreError(error.message, "ZONE_GET_FAILED");
+  }
+  return (data as ZoneRow | null) ?? null;
+}
+
 export async function ensureActiveLayout(input: {
   team_id: string;
   place_id: string;

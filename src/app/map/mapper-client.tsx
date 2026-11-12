@@ -124,6 +124,8 @@ type Props = {
   placeAddress: string | null;
   initialZones: ZoneListRow[];
   layoutVersionId: string | null;
+  places: Array<{ id: string; name: string }>;
+  sessionUploads: boolean;
 };
 
 function cardinal(deg: number | null): string {
@@ -684,6 +686,33 @@ export function MapperClient(props: Props) {
         {props.placeAddress ? (
           <p style={{ margin: 0, color: "#666", fontSize: 15 }}>{props.placeAddress}</p>
         ) : null}
+        {props.places.length > 0 ? (
+          <label style={{ display: "block", marginTop: 12, fontSize: 14 }}>
+            Store
+            <select
+              value={props.placeId}
+              aria-label="Store"
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id && id !== props.placeId) {
+                  window.location.href = `/map?place_id=${encodeURIComponent(id)}`;
+                }
+              }}
+              style={{ ...input, marginTop: 6, width: "100%" }}
+            >
+              {props.places.map((place) => (
+                <option key={place.id} value={place.id}>
+                  {place.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <p style={{ margin: "10px 0 0", fontSize: 14 }}>
+          <a href="/">All stores</a>
+          {" · "}
+          <a href="/api/auth/logout">Sign out</a>
+        </p>
       </header>
 
       <section style={card}>
@@ -904,9 +933,17 @@ export function MapperClient(props: Props) {
       <ImagesCard
         placeId={props.placeId}
         zoneReady={zoneReady}
+        zoneType={zoneType}
+        zoneLabel={zoneLabel}
         extractProgress={extractProgress}
         pending={pending}
+        sessionUploads={props.sessionUploads}
         onProcess={processPhotos}
+        onDraft={(draft) => {
+          setText((prev) => (prev.trim() ? prev : draft.text));
+          if (draft.zoneType) setZoneType(draft.zoneType);
+          if (draft.zoneLabel) setZoneLabel(draft.zoneLabel);
+        }}
         onStatus={setStatus}
         onError={setError}
       />

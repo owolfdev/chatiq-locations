@@ -1,7 +1,7 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-12  
-Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: deploy album UI; LLM normalize.
+Last updated: 2026-11-13  
+Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: phone-smoke field-day login and server extract.
 
 Owner: Engineering
 
@@ -21,7 +21,7 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-11-12):** Phone-smoke the in-page aisle camera (stays open, 0.5 default, 24 shots). Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+**Next action (2026-11-13):** Phone-smoke the field-day mapper: install the PWA, sign in with a ChatIQ account, pick a store, switch to the next store. Server extract smoke is still open (Process, leave, reopen, draft in Text/speak). Spec: [`operator-input-and-hosting.md`](./operator-input-and-hosting.md) field day, [`survey-capture-jobs.md`](./survey-capture-jobs.md).
 
 ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_token`). Sibling: `OPENAI_API_KEY`, same service/mapper token.
 
@@ -34,13 +34,14 @@ ChatIQ env: `LOCATIONS_RUNTIME=sibling`, URL, token (Open mapper passes `access_
 | **Organic mapping** | Place first; any grain; multi-agent; publish gates shopper answers. [`organic-mapping.md`](./organic-mapping.md). |
 | **Hosting split** | **ChatIQ** = `locations_mode` + **one bound place** + launch mapper. **Sibling** = mapper UI + ingest/vision/publish engines. [`operator-input-and-hosting.md`](./operator-input-and-hosting.md). |
 | **One bot ↔ one place** | No multi-store picker in shopper chat. |
+| **Field day** | Mapper is a PWA. Sign-in uses the ChatIQ account via API and a signed team pass. Home screen lists that team’s stores. Picking a store does not rebind a bot. |
 | **Source-agnostic ingest** | Image / voice / spreadsheet / chat → text → LLM normalize → draft → publish. |
 | **LLM normalize** | Required for freeform; deterministic sibling applies typed patches only; no auto-publish. |
 | **Mapper UX** | Active zone (load/save/rename/delete) + Images (named photo sets + live Process) + text/speak + compass. |
 | **Photos** | Ephemeral evidence; durable SoT is text + pose metadata (+ optional thumbnail). |
 | **Source of truth** | Sibling `_locations_*` DB; no dual-write forever. |
 | **Legacy in-`chatiq`** | Dashboard UI archived 2026-11-07; in-process libs quarantined. |
-| **Out of scope v1** | Geo nearest-store, AR measure, native App Store client, live ERP stock. |
+| **Out of scope v1** | Geo nearest-store, AR measure, native App Store client, live ERP stock. Phone client is the PWA. |
 
 ## 1) Why
 
@@ -94,6 +95,27 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-13 — Field-day mapper (PWA, ChatIQ login, store list)
+
+**What changed:** Spec in [`operator-input-and-hosting.md`](./operator-input-and-hosting.md). Mapper home screen is a PWA. Sign-in posts to ChatIQ `POST /api/locations/mapper-session`, which checks the existing password and returns a 14-day signed pass with `team_id`. The home dropdown lists that team’s stores. The aisle screen can switch stores. Bot binding stays in ChatIQ settings. When `MAPPER_SESSION_SECRET` is set, map actions and survey calls are limited to that team. The shared mapper token still works for the old Open mapper link.
+
+**Next:** Set the same secret on both Vercel projects, set `CHATIQ_BASE_URL` on locations, then phone-smoke sign-in and store switch.
+
+```text
+chatiq-locations: [###################_] ~96% -> Phone-smoke field-day login + server extract
+chatiq: mapper-session API shipped locally
+```
+
+### 2026-11-12 — Server extract chain
+
+**What changed:** Process uploads the photo set and queues extract. Each Vercel run takes several photos, then starts the next run. A stale "running" photo is retried. Reopening the mapper loads the unpublished draft into Text/speak. Retry extract re-runs a failed set. Spec: [`survey-capture-jobs.md`](./survey-capture-jobs.md).
+
+**Next:** Phone-smoke: upload, leave the page, come back to the draft.
+
+```text
+chatiq-locations: [####################] ~96% -> Phone-smoke server extract
+```
 
 ### 2026-11-12 — In-page aisle camera
 
