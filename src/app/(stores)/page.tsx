@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { readMapperSession, getMapperSessionSecret } from "@/lib/auth/mapper-session";
 import { listPlacesForTeam } from "@/lib/supabase/store";
 
+import { OpenStoreForm } from "./open-store-form";
+
 export default async function HomePage() {
   if (!getMapperSessionSecret()) {
     return (
@@ -49,44 +51,9 @@ export default async function HomePage() {
       {places.length === 0 && !loadError ? (
         <p style={{ color: "#555" }}>No stores yet for this team.</p>
       ) : (
-        <form action="/map" method="get" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 14 }}>
-            Store
-            <select
-              name="place_id"
-              defaultValue={places[0]?.id}
-              required
-              style={{
-                font: "inherit",
-                fontSize: 16,
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #ccc",
-                background: "#fff",
-              }}
-            >
-              {places.map((place) => (
-                <option key={place.id} value={place.id}>
-                  {place.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="submit"
-            style={{
-              font: "inherit",
-              fontSize: 16,
-              padding: "12px 14px",
-              borderRadius: 8,
-              border: "none",
-              background: "#111",
-              color: "#fff",
-            }}
-          >
-            Open store
-          </button>
-        </form>
+        <OpenStoreForm
+          places={places.map((place) => ({ id: place.id, name: place.name }))}
+        />
       )}
       <p style={{ marginTop: 24 }}>
         <a href="/api/auth/logout">Sign out</a>

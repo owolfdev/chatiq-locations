@@ -19,6 +19,20 @@ a {
   color: #0b5fff;
 }
 
+@keyframes mapper-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.mapper-pulse {
+  animation: mapper-pulse 1.2s ease-in-out infinite;
+}
+
 code {
   font-size: 0.9em;
   background: #eee;

@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, type CSSProperties, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+
+import { MapperStatus } from "@/components/mapper-status";
 
 export function LoginForm(props: { next: string; configured: boolean }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "signin" | "next">("idle");
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!props.configured) return;
-    setPending(true);
+    if (!props.configured || phase !== "idle") return;
+    setPhase("signin");
     setError(null);
     try {
       const res = await fetch("/api/auth/login", {
@@ -22,14 +26,31 @@ export function LoginForm(props: { next: string; configured: boolean }) {
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
         setError(json.error || "Sign-in failed");
-        setPending(false);
+        setPhase("idle");
         return;
       }
-      window.location.assign(props.next || "/");
+      setPhase("next");
+      router.push(props.next || "/");
     } catch {
       setError("Sign-in failed");
-      setPending(false);
+      setPhase("idle");
     }
+  }
+
+  if (phase !== "idle") {
+    const openingStore = props.next.startsWith("/map");
+    return (
+      <MapperStatus
+        title={phase === "signin" ? "Sign in" : openingStore ? "Store mapper" : "Your stores"}
+        detail={
+          phase === "signin"
+            ? "Signing in…"
+            : openingStore
+              ? "Opening store…"
+              : "Opening your stores…"
+        }
+      />
+    );
   }
 
   return (
@@ -64,8 +85,8 @@ export function LoginForm(props: { next: string; configured: boolean }) {
             />
           </label>
           {error ? <p style={{ margin: 0, color: "#b71c1c" }}>{error}</p> : null}
-          <button type="submit" disabled={pending} style={button}>
-            {pending ? "Signing in…" : "Sign in"}
+          <button type="submit" style={button}>
+            Sign in
           </button>
         </form>
       ) : (

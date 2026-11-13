@@ -9,6 +9,7 @@ import {
   useTransition,
   type CSSProperties,
 } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   addMapperItem,
@@ -26,6 +27,7 @@ import {
   ImagesCard,
   type ImagesExtractProgress,
 } from "@/components/mapper/images-card";
+import { MapperStatus } from "@/components/mapper-status";
 import { readMapperToken } from "@/lib/survey/mapper-token-client";
 import { compressImageForUpload } from "@/lib/vision/compress-image-client";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
@@ -136,6 +138,7 @@ function cardinal(deg: number | null): string {
 }
 
 export function MapperClient(props: Props) {
+  const router = useRouter();
   const [zones, setZones] = useState(props.initialZones);
   const [text, setText] = useState("");
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
@@ -159,6 +162,9 @@ export function MapperClient(props: Props) {
   );
   const [listening, setListening] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [leaving, setLeaving] = useState<{ title: string; detail: string } | null>(
+    null
+  );
   const extractStartedAtRef = useRef(0);
   const etaTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -678,6 +684,10 @@ export function MapperClient(props: Props) {
 
   const inspectZone = zones.find((z) => z.id === inspectId) || null;
 
+  if (leaving) {
+    return <MapperStatus title={leaving.title} detail={leaving.detail} />;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <header>
@@ -694,9 +704,13 @@ export function MapperClient(props: Props) {
               aria-label="Store"
               onChange={(e) => {
                 const id = e.target.value;
-                if (id && id !== props.placeId) {
-                  window.location.href = `/map?place_id=${encodeURIComponent(id)}`;
-                }
+                if (!id || id === props.placeId) return;
+                const place = props.places.find((row) => row.id === id);
+                setLeaving({
+                  title: place?.name || "Store",
+                  detail: "Opening store…",
+                });
+                router.push(`/map?place_id=${encodeURIComponent(id)}`);
               }}
               style={{ ...input, marginTop: 6, width: "100%" }}
             >
@@ -709,7 +723,16 @@ export function MapperClient(props: Props) {
           </label>
         ) : null}
         <p style={{ margin: "10px 0 0", fontSize: 14 }}>
-          <a href="/">All stores</a>
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              setLeaving({ title: "Your stores", detail: "Loading your stores…" });
+              router.push("/");
+            }}
+          >
+            All stores
+          </a>
           {" · "}
           <a href="/api/auth/logout">Sign out</a>
         </p>
