@@ -130,13 +130,6 @@ type Props = {
   sessionUploads: boolean;
 };
 
-function cardinal(deg: number | null): string {
-  if (deg == null || Number.isNaN(deg)) return "—";
-  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const i = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
-  return dirs[i];
-}
-
 export function MapperClient(props: Props) {
   const router = useRouter();
   const [zones, setZones] = useState(props.initialZones);
@@ -144,7 +137,6 @@ export function MapperClient(props: Props) {
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [zoneType, setZoneType] = useState("aisle");
   const [zoneLabel, setZoneLabel] = useState("");
-  const [heading, setHeading] = useState<number | null>(null);
   const [coords, setCoords] = useState<{
     lat: number;
     lng: number;
@@ -184,33 +176,13 @@ export function MapperClient(props: Props) {
 
   const pose: MapperPose = useMemo(
     () => ({
-      heading_deg: heading,
+      heading_deg: null,
       latitude: coords?.lat ?? null,
       longitude: coords?.lng ?? null,
       accuracy_m: coords?.accuracy ?? null,
     }),
-    [heading, coords]
+    [coords]
   );
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
-      return;
-    }
-    const onOrient = (e: DeviceOrientationEvent) => {
-      // webkitCompassHeading (iOS) or alpha
-      const wk = (e as DeviceOrientationEvent & { webkitCompassHeading?: number })
-        .webkitCompassHeading;
-      if (typeof wk === "number") {
-        setHeading(wk);
-        return;
-      }
-      if (typeof e.alpha === "number") {
-        setHeading((360 - e.alpha + 360) % 360);
-      }
-    };
-    window.addEventListener("deviceorientation", onOrient);
-    return () => window.removeEventListener("deviceorientation", onOrient);
-  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -739,63 +711,14 @@ export function MapperClient(props: Props) {
       </header>
 
       <section style={card}>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <div
-            aria-hidden
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              border: "2px solid #111",
-              position: "relative",
-              flexShrink: 0,
-            }}
-          >
-            <span
-              style={{
-                position: "absolute",
-                top: 4,
-                left: "50%",
-                transform: "translateX(-50%)",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              N
-            </span>
-            <span
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                width: 3,
-                height: 28,
-                marginLeft: -1.5,
-                marginTop: -28,
-                background: "#c62828",
-                transformOrigin: "bottom center",
-                transform: `rotate(${heading ?? 0}deg)`,
-                borderRadius: 2,
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 15, lineHeight: 1.5 }}>
-            <div>
-              <strong>{cardinal(heading)}</strong>
-              {heading != null ? ` · ${Math.round(heading)}°` : " · compass pending"}
-            </div>
-            <div style={{ color: "#555" }}>
-              {coords
-                ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` +
-                  (coords.accuracy != null
-                    ? ` ±${Math.round(coords.accuracy)}m`
-                    : "")
-                : poseError || "Waiting for GPS…"}
-            </div>
-            <div style={{ color: "#888", fontSize: 14 }}>
-              Optional — capture never blocked if missing
-            </div>
-          </div>
+        <div style={{ fontSize: 15, lineHeight: 1.5, color: "#555" }}>
+          {coords
+            ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` +
+              (coords.accuracy != null ? ` ±${Math.round(coords.accuracy)}m` : "")
+            : poseError || "Waiting for GPS…"}
+        </div>
+        <div style={{ color: "#888", fontSize: 14, marginTop: 4 }}>
+          Optional — capture never blocked if missing
         </div>
       </section>
 
