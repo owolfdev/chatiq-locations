@@ -274,8 +274,13 @@ export function ImagesCard(props: Props) {
     return document.visibilityState !== "visible";
   }
 
+  /** Supabase copy is off until on-phone processing is solid. */
+  function serverCopyPaused() {
+    return true;
+  }
+
   async function drainUploads() {
-    if (!canSurvey) return;
+    if (serverCopyPaused() || !canSurvey) return;
     if (drainLock.current) {
       drainAgain.current = true;
       return;
@@ -454,14 +459,7 @@ export function ImagesCard(props: Props) {
         setLoadedSource("phone");
         setSelectedSetId(`phone:${created.id}`);
         props.onStatus(`Saved “${created.name}” on this phone · ${photos.length} photo(s)`);
-        setCopy({
-          phase: "phone",
-          current: photos.length,
-          total: photos.length,
-          label: `Saved on this phone · ${photos.length} photo(s)`,
-          detail: canSurvey ? "Starting the server copy…" : "Sign in to keep a server copy.",
-        });
-        void drainUploads();
+        setCopy(null);
       } catch (e) {
         props.onError(e instanceof Error ? e.message : "Save set failed");
       } finally {
@@ -475,14 +473,7 @@ export function ImagesCard(props: Props) {
     try {
       await persistGallery(setId, photos);
       props.onStatus(`Saved “${setName}” on this phone · ${photos.length} photo(s)`);
-      setCopy({
-        phase: "phone",
-        current: photos.length,
-        total: photos.length,
-        label: `Saved on this phone · ${photos.length} photo(s)`,
-        detail: canSurvey ? "Starting the server copy…" : "Sign in to keep a server copy.",
-      });
-      void drainUploads();
+      setCopy(null);
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Save set failed");
     } finally {
@@ -680,7 +671,7 @@ export function ImagesCard(props: Props) {
       } else if (loadedSource !== "server") {
         await ensurePhoneSet(photos);
       }
-      void drainUploads();
+      setCopy(null);
       await props.onProcess(photos.map((photo) => photo.file));
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Process failed");
@@ -696,7 +687,7 @@ export function ImagesCard(props: Props) {
       <label style={label}>Images</label>
       <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
         Photos stay on this phone. Process starts from them and shows each
-        photo as it finishes. A server copy uploads only while this page is open.
+        photo as it finishes.
       </p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
