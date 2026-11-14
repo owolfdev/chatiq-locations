@@ -526,14 +526,21 @@ export async function upsertZone(input: {
     .maybeSingle();
 
   if (existing) {
+    const patch: Record<string, string | null> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (input.zone_description !== undefined) {
+      patch.zone_description = input.zone_description?.trim() || null;
+    }
+    if (input.near_landmark !== undefined) {
+      patch.near_landmark = input.near_landmark?.trim() || null;
+    }
+    if (input.placement_note !== undefined) {
+      patch.placement_note = input.placement_note?.trim() || null;
+    }
     const { data, error } = await supabase
       .from(LOCATIONS_TABLES.zones)
-      .update({
-        zone_description: input.zone_description?.trim() || null,
-        near_landmark: input.near_landmark?.trim() || null,
-        placement_note: input.placement_note?.trim() || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq("id", existing.id)
       .select(
         "id, team_id, place_id, layout_version_id, zone_type, zone_label, zone_description, near_landmark, placement_note, is_active"

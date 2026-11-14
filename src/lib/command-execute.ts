@@ -56,6 +56,15 @@ function slotString(
   return t.length > 0 ? t : null;
 }
 
+/** Undefined when the caller did not send the key, so an update can leave it. */
+function slotIfPresent(
+  slots: Record<string, unknown> | undefined,
+  key: string
+): string | null | undefined {
+  if (!slots || !(key in slots)) return undefined;
+  return slotString(slots, key);
+}
+
 function requireTeamId(
   req: LocationsCommandExecuteRequest
 ): string {
@@ -261,9 +270,9 @@ export async function executeLocationsCommand(
           layout_version_id,
           zone_type,
           zone_label,
-          zone_description: slotString(slots, "zone_description"),
-          near_landmark: slotString(slots, "near_landmark"),
-          placement_note: slotString(slots, "placement_note"),
+          zone_description: slotIfPresent(slots, "zone_description"),
+          near_landmark: slotIfPresent(slots, "near_landmark"),
+          placement_note: slotIfPresent(slots, "placement_note"),
         });
         data = { zone };
         break;

@@ -96,6 +96,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-14 — How to find a zone
+
+**What changed:** Active zone has a **How to find it** box. Save zone stores those directions and publishes the area. Adding products no longer clears the note. The shopper bot uses the note when someone asks where that area is.
+
+**Next:** Phone-smoke on-phone process, then save a note on a real aisle and ask the bot where that area is.
+
+```text
+chatiq-locations: [###################_] ~96% -> Phone-smoke on-phone process + zone directions
+chatiq: concierge speaks the stored directions
+```
+
 ### 2026-11-14 — Process from the phone again
 
 **What changed:** Process sends the photos already on the phone, one at a time, with a live count and time left. Named sets are stored on the phone. A Supabase copy uploads only while the mapper is open and pauses when the phone is locked or left. The server extract queue is no longer the process path.
