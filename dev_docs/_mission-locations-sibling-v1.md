@@ -1,7 +1,7 @@
 # Mission: Locations sibling v1 (`chatiq-locations`)
 
-Last updated: 2026-11-13  
-Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: phone-smoke field-day login and server extract.
+Last updated: 2026-11-14  
+Status: **Sibling live** (pilots + concierge + vision draft + album mapper UX). Next: phone-smoke on-phone process and the foreground server copy.
 
 Owner: Engineering
 
@@ -95,6 +95,16 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 - Requiring complete floor plans before any shopper answer
 
 ## 4) Progress Log
+
+### 2026-11-14 — Process from the phone again
+
+**What changed:** Process sends the photos already on the phone, one at a time, with a live count and time left. Named sets are stored on the phone. A Supabase copy uploads only while the mapper is open and pauses when the phone is locked or left. The server extract queue is no longer the process path.
+
+**Next:** Phone-smoke: process a set with the screen open, confirm the draft, then confirm the server copy pauses when the app is backgrounded.
+
+```text
+chatiq-locations: [###################_] ~96% -> Phone-smoke on-phone process + foreground copy
+```
 
 ### 2026-11-13 — Field-day mapper (PWA, ChatIQ login, store list)
 

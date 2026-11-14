@@ -61,7 +61,7 @@ Operators map a store **organically** (place → zones/items anytime, multi-agen
 | Work | Status |
 |------|--------|
 | Port archived OpenAI vision extract into sibling | ✅ 2026-11-08 (`src/lib/vision/*`) |
-| Process photos → editable draft in Text / speak | ✅ 2026-11-08 |
+| Process photos → editable draft in Text / speak | ✅ 2026-11-14 on-phone, one photo at a time |
 | Staged multi-image jobs + telemetry (`extract.job_*`) | ✅ 2026-11-09 capture sets + cron tick |
 | 1 / 3 / 8 image ladder green | Manual ready; formal ladder TBD |
 | Operator Add / Replace after draft (no auto-publish) | ✅ |

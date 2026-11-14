@@ -13,8 +13,19 @@ import {
   mapperAuthHeaders,
   readMapperToken,
 } from "@/lib/survey/mapper-token-client";
+import {
+  createPhoneSet,
+  deletePhonePhoto,
+  deletePhoneSet,
+  listPhoneSets,
+  listPhoneUploads,
+  loadPhoneSetPhotos,
+  markPhonePhotoUploaded,
+  replacePhoneSetPhotos,
+  setPhoneServerSetId,
+  type PhonePhotoSet,
+} from "@/lib/survey/phone-photo-store";
 import { MAX_ASSETS_PER_CAPTURE_SET } from "@/lib/supabase/tables";
-import { compressImageForUpload } from "@/lib/vision/compress-image-client";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
 
 type PhotoItem = {
@@ -34,15 +45,12 @@ type CaptureSet = {
   created_at: string;
 };
 
-type ExtractJob = {
-  id: string;
-  set_id: string;
-  status: string;
-  images_total: number;
-  images_done: number;
-  failure_reason: string | null;
-  draft_text: string | null;
-  created_at: string;
+type CopyProgress = {
+  phase: "phone" | "uploading" | "paused" | "saved" | "error";
+  current: number;
+  total: number;
+  label: string;
+  detail?: string;
 };
 
 export type ImagesExtractProgress = {
@@ -79,21 +87,22 @@ export function ImagesCard(props: Props) {
   const [loadedSetId, setLoadedSetId] = useState<string | null>(null);
   const [loadedSetName, setLoadedSetName] = useState<string | null>(null);
   const [sets, setSets] = useState<CaptureSet[]>([]);
-  /** Selection in the set dropdown (may differ briefly while loading). */
+  const [phoneSets, setPhoneSets] = useState<PhonePhotoSet[]>([]);
+  /** Selection in the set dropdown (`phone:` or `server:` prefix). */
   const [selectedSetId, setSelectedSetId] = useState("");
+  const [loadedSource, setLoadedSource] = useState<"phone" | "server" | null>(null);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<PhotoItem | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [retrySetId, setRetrySetId] = useState<string | null>(null);
-  const appliedJobIds = useRef(new Set<string>());
+  const [copy, setCopy] = useState<CopyProgress | null>(null);
   const canSurvey = Boolean(props.sessionUploads) || readMapperToken().length > 0;
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onDraftRef = useRef(props.onDraft);
   const onStatusRef = useRef(props.onStatus);
   const onErrorRef = useRef(props.onError);
-  onDraftRef.current = props.onDraft;
   onStatusRef.current = props.onStatus;
   onErrorRef.current = props.onError;
+  const drainLock = useRef(false);
+  const drainAgain = useRef(false);
+  const processLock = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef(photos);
@@ -119,120 +128,18 @@ export function ImagesCard(props: Props) {
     if (json.ok) setSets(json.sets || []);
   }, [canSurvey, props.placeId]);
 
+  const refreshPhoneSets = useCallback(async () => {
+    const rows = await listPhoneSets(props.placeId);
+    setPhoneSets(rows);
+    return rows;
+  }, [props.placeId]);
+
   useEffect(() => {
     void refreshSets();
-  }, [refreshSets]);
-
-  const applyJobUpdate = useCallback(
-    (job: ExtractJob, knownSets: CaptureSet[]) => {
-      const created = new Date(job.created_at).getTime();
-      if (Number.isFinite(created) && Date.now() - created > 7 * 24 * 60 * 60 * 1000) {
-        return false;
-      }
-      const set = knownSets.find((item) => item.id === job.set_id);
-      if (
-        (job.status === "draft_ready" || set?.status === "draft_ready") &&
-        job.draft_text?.trim() &&
-        !appliedJobIds.current.has(job.id)
-      ) {
-        appliedJobIds.current.add(job.id);
-        setRetrySetId(null);
-        onDraftRef.current({
-          text: job.draft_text,
-          zoneType: set?.zone_type || props.zoneType,
-          zoneLabel: set?.zone_label || props.zoneLabel,
-        });
-        onStatusRef.current(
-          "Draft is in Text/speak. Review it, then Add or Replace. Nothing is published yet."
-        );
-        return false;
-      }
-      if (job.status === "failed" && !appliedJobIds.current.has(`fail:${job.id}`)) {
-        appliedJobIds.current.add(`fail:${job.id}`);
-        setRetrySetId(job.set_id);
-        onErrorRef.current(
-          job.failure_reason ||
-            "Extract failed. Retry uses the saved photos."
-        );
-        return false;
-      }
-      if (job.status === "queued" || job.status === "running") {
-        onStatusRef.current(
-          `Processing on the server · ${job.images_done}/${job.images_total}. You can leave this page. The draft loads here when you come back.`
-        );
-        return true;
-      }
-      return false;
-    },
-    [props.zoneLabel, props.zoneType]
-  );
-
-  const watchLatestJob = useCallback(async () => {
-    if (!canSurvey) return;
-    const [jobsRes, setsRes] = await Promise.all([
-      fetch(
-        `/api/survey/jobs?place_id=${encodeURIComponent(props.placeId)}`,
-        { headers: mapperAuthHeaders() }
-      ),
-      fetch(
-        `/api/survey/sets?place_id=${encodeURIComponent(props.placeId)}`,
-        { headers: mapperAuthHeaders() }
-      ),
-    ]);
-    const jobsJson = (await jobsRes.json()) as {
-      ok: boolean;
-      jobs?: ExtractJob[];
-    };
-    const setsJson = (await setsRes.json()) as {
-      ok: boolean;
-      sets?: CaptureSet[];
-    };
-    if (setsJson.ok && setsJson.sets) setSets(setsJson.sets);
-    const job = jobsJson.jobs?.[0];
-    if (!job) return;
-    const keepPolling = applyJobUpdate(job, setsJson.sets || []);
-    if (keepPolling) {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
-      pollTimer.current = setTimeout(() => {
-        void watchLatestJob();
-      }, 5000);
-    }
-  }, [applyJobUpdate, canSurvey, props.placeId]);
-
-  useEffect(() => {
-    void watchLatestJob();
-    return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
-    };
-  }, [watchLatestJob]);
-
-  async function kickExtractQueue() {
-    await fetch("/api/cron/extract-tick", {
-      method: "POST",
-      headers: mapperAuthHeaders(),
+    void refreshPhoneSets().catch(() => {
+      onErrorRef.current("Could not read photo sets saved on this phone");
     });
-  }
-
-  async function enqueueSet(setId: string) {
-    const res = await fetch(`/api/survey/sets/${setId}/extract`, {
-      method: "POST",
-      headers: mapperAuthHeaders(),
-    });
-    const json = (await res.json()) as {
-      ok: boolean;
-      job?: ExtractJob;
-      error?: string;
-    };
-    if (!json.ok || !json.job) {
-      throw new Error(json.error || "Could not queue extract");
-    }
-    try {
-      await kickExtractQueue();
-    } catch {
-      /* the minute cron continues the queue if this kick fails */
-    }
-    return json.job;
-  }
+  }, [refreshSets, refreshPhoneSets]);
 
   function addFileList(files: File[]) {
     if (!files.length) return;
@@ -261,6 +168,7 @@ export function ImagesCard(props: Props) {
     setPhotos([]);
     setLoadedSetId(null);
     setLoadedSetName(null);
+    setLoadedSource(null);
     setSelectedSetId("");
   }
 
@@ -285,6 +193,13 @@ export function ImagesCard(props: Props) {
         return;
       }
       setBusy(false);
+    }
+    if (loadedSource === "phone") {
+      try {
+        await deletePhonePhoto(photo.id);
+      } catch {
+        /* the grid update still stands; the next save rewrites the set */
+      }
     }
     URL.revokeObjectURL(photo.url);
     setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
@@ -331,65 +246,222 @@ export function ImagesCard(props: Props) {
     return beginJson.asset.id;
   }
 
-  async function saveSet(asNew: boolean) {
-    if (!canSurvey) {
-      props.onError(
-        "Sign in to save photo sets."
-      );
+  async function createServerSet(name: string) {
+    const res = await fetch("/api/survey/sets", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...mapperAuthHeaders(),
+      },
+      body: JSON.stringify({
+        place_id: props.placeId,
+        name,
+        zone_type: "album",
+      }),
+    });
+    const json = (await res.json()) as {
+      ok: boolean;
+      set?: CaptureSet;
+      error?: string;
+    };
+    if (!json.ok || !json.set) {
+      throw new Error(json.error || "Could not start the server copy");
+    }
+    return json.set.id;
+  }
+
+  function mapperInBackground() {
+    return document.visibilityState !== "visible";
+  }
+
+  async function drainUploads() {
+    if (!canSurvey) return;
+    if (drainLock.current) {
+      drainAgain.current = true;
       return;
     }
+    drainLock.current = true;
+    try {
+      do {
+        drainAgain.current = false;
+        const jobs = await listPhoneUploads(props.placeId);
+        if (jobs.length === 0) {
+          setCopy((prev) =>
+            prev && (prev.phase === "uploading" || prev.phase === "phone")
+              ? {
+                  phase: "saved",
+                  current: prev.total,
+                  total: prev.total,
+                  label: "Server copy saved",
+                }
+              : prev
+          );
+          continue;
+        }
+        for (const job of jobs) {
+          if (mapperInBackground()) {
+            const done = job.photos.filter((photo) => photo.serverAssetId).length;
+            setCopy({
+              phase: "paused",
+              current: done,
+              total: job.photos.length,
+              label: "Copy paused",
+              detail: "Keep the mapper open to continue saving a copy.",
+            });
+            return;
+          }
+          let serverSetId = job.set.serverSetId;
+          if (!serverSetId) {
+            serverSetId = await createServerSet(job.set.name);
+            await setPhoneServerSetId(job.set.id, serverSetId);
+          }
+          const pending = job.photos.filter((photo) => !photo.serverAssetId);
+          let done = job.photos.length - pending.length;
+          for (const photo of pending) {
+            if (mapperInBackground()) {
+              setCopy({
+                phase: "paused",
+                current: done,
+                total: job.photos.length,
+                label: "Copy paused",
+                detail: "Keep the mapper open to continue saving a copy.",
+              });
+              return;
+            }
+            setCopy({
+              phase: "uploading",
+              current: done + 1,
+              total: job.photos.length,
+              label: `Saving a copy · ${done + 1} of ${job.photos.length}`,
+              detail: job.set.name,
+            });
+            const file = new File([photo.blob], `${photo.id}.jpg`, {
+              type: photo.contentType || "image/jpeg",
+            });
+            const assetId = await uploadPhotoToSet(serverSetId, file);
+            await markPhonePhotoUploaded(photo.id, assetId);
+            done += 1;
+            setPhotos((prev) =>
+              prev.map((item) =>
+                item.id === photo.id ? { ...item, assetId } : item
+              )
+            );
+          }
+        }
+        const remaining = await listPhoneUploads(props.placeId);
+        if (remaining.length === 0) {
+          const total = jobs.reduce((sum, job) => sum + job.photos.length, 0);
+          setCopy({
+            phase: "saved",
+            current: total,
+            total,
+            label: "Server copy saved",
+          });
+        }
+      } while (drainAgain.current);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Server copy failed";
+      setCopy({
+        phase: "error",
+        current: 0,
+        total: 0,
+        label: "Server copy stopped",
+        detail: message,
+      });
+      onErrorRef.current(message);
+    } finally {
+      drainLock.current = false;
+    }
+  }
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void drainUploads();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    void drainUploads();
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+    // Resume copies when this store is open. drainUploads is recreated each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.placeId, canSurvey]);
+
+  async function persistGallery(setId: string, gallery: PhotoItem[]) {
+    await replacePhoneSetPhotos(
+      setId,
+      gallery.map((photo) => ({
+        id: photo.id,
+        blob: photo.file,
+        contentType: photo.file.type || "image/jpeg",
+        serverAssetId: photo.assetId || null,
+      }))
+    );
+  }
+
+  async function ensurePhoneSet(gallery: PhotoItem[]): Promise<PhonePhotoSet> {
+    if (loadedSource === "phone" && loadedSetId) {
+      const existing = phoneSets.find((set) => set.id === loadedSetId);
+      if (existing) {
+        await persistGallery(existing.id, gallery);
+        return existing;
+      }
+    }
+    const stamp = new Date().toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const name = `${props.zoneType} ${props.zoneLabel.trim()} · ${stamp}`;
+    const created = await createPhoneSet({ placeId: props.placeId, name });
+    await persistGallery(created.id, gallery);
+    setPhoneSets((prev) => [created, ...prev.filter((set) => set.id !== created.id)]);
+    setLoadedSetId(created.id);
+    setLoadedSetName(created.name);
+    setLoadedSource("phone");
+    setSelectedSetId(`phone:${created.id}`);
+    return created;
+  }
+
+  async function saveSet(asNew: boolean) {
     if (photos.length === 0) {
       props.onError("Add at least one photo before saving a set");
       return;
     }
 
-    let setId = loadedSetId;
+    const renaming = asNew || loadedSource !== "phone" || !loadedSetId;
+    let setId = loadedSource === "phone" ? loadedSetId : null;
     let setName = loadedSetName;
 
-    if (asNew || !setId) {
+    if (renaming || !setId) {
       const name = window.prompt(
         "Name this photo set",
-        setName || `Set ${new Date().toLocaleString()}`
+        setName || `${props.zoneType} ${props.zoneLabel.trim() || "photos"}`
       );
       if (!name?.trim()) return;
       setBusy(true);
       props.onError(null);
       try {
-        const res = await fetch("/api/survey/sets", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...mapperAuthHeaders(),
-          },
-          body: JSON.stringify({
-            place_id: props.placeId,
-            name: name.trim(),
-          }),
+        const created = await createPhoneSet({
+          placeId: props.placeId,
+          name: name.trim(),
         });
-        const json = (await res.json()) as {
-          ok: boolean;
-          set?: CaptureSet;
-          error?: string;
-        };
-        if (!json.ok || !json.set) {
-          props.onError(json.error || "Failed to create set");
-          setBusy(false);
-          return;
-        }
-        setId = json.set.id;
-        setName = json.set.zone_label;
-        // Upload all current photos into the new set
-        const withAssets: PhotoItem[] = [];
-        for (const p of photos) {
-          const assetId = await uploadPhotoToSet(setId, p.file);
-          withAssets.push({ ...p, assetId });
-        }
-        setPhotos(withAssets);
-        setLoadedSetId(setId);
-        setLoadedSetName(setName);
-        setSelectedSetId(setId);
-        await refreshSets();
-        props.onStatus(`Saved set “${setName}” · ${withAssets.length} photo(s)`);
+        await persistGallery(created.id, photos);
+        setId = created.id;
+        setName = created.name;
+        setPhoneSets((prev) => [created, ...prev]);
+        setLoadedSetId(created.id);
+        setLoadedSetName(created.name);
+        setLoadedSource("phone");
+        setSelectedSetId(`phone:${created.id}`);
+        props.onStatus(`Saved “${created.name}” on this phone · ${photos.length} photo(s)`);
+        setCopy({
+          phase: "phone",
+          current: photos.length,
+          total: photos.length,
+          label: `Saved on this phone · ${photos.length} photo(s)`,
+          detail: canSurvey ? "Starting the server copy…" : "Sign in to keep a server copy.",
+        });
+        void drainUploads();
       } catch (e) {
         props.onError(e instanceof Error ? e.message : "Save set failed");
       } finally {
@@ -398,30 +470,55 @@ export function ImagesCard(props: Props) {
       return;
     }
 
-    // Update existing: upload only photos that aren't on the server yet
     setBusy(true);
     props.onError(null);
     try {
-      const withAssets: PhotoItem[] = [];
-      let added = 0;
-      for (const p of photos) {
-        if (p.assetId) {
-          withAssets.push(p);
-          continue;
-        }
-        const assetId = await uploadPhotoToSet(setId, p.file);
-        withAssets.push({ ...p, assetId });
-        added += 1;
-      }
-      setPhotos(withAssets);
-      await refreshSets();
-      props.onStatus(
-        added > 0
-          ? `Updated “${setName}” · added ${added} photo(s)`
-          : `“${setName}” already up to date`
-      );
+      await persistGallery(setId, photos);
+      props.onStatus(`Saved “${setName}” on this phone · ${photos.length} photo(s)`);
+      setCopy({
+        phase: "phone",
+        current: photos.length,
+        total: photos.length,
+        label: `Saved on this phone · ${photos.length} photo(s)`,
+        detail: canSurvey ? "Starting the server copy…" : "Sign in to keep a server copy.",
+      });
+      void drainUploads();
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Save set failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function showLoadedPhotos(next: PhotoItem[], name: string) {
+    for (const p of photos) URL.revokeObjectURL(p.url);
+    setPhotos(next);
+    props.onStatus(`Loaded “${name}” · ${next.length} photo(s). Process when ready.`);
+  }
+
+  async function loadPhone(set: PhonePhotoSet) {
+    setBusy(true);
+    props.onError(null);
+    try {
+      const rows = await loadPhoneSetPhotos(set.id);
+      const loaded: PhotoItem[] = rows.slice(0, MAX_PROCESS_PHOTOS).map((row) => {
+        const file = new File([row.blob], `${row.id}.jpg`, {
+          type: row.contentType || "image/jpeg",
+        });
+        return {
+          id: row.id,
+          file,
+          url: URL.createObjectURL(file),
+          assetId: row.serverAssetId || undefined,
+        };
+      });
+      showLoadedPhotos(loaded, set.name);
+      setLoadedSetId(set.id);
+      setLoadedSetName(set.name);
+      setLoadedSource("phone");
+      setSelectedSetId(`phone:${set.id}`);
+    } catch (e) {
+      props.onError(e instanceof Error ? e.message : "Load set failed");
     } finally {
       setBusy(false);
     }
@@ -453,8 +550,6 @@ export function ImagesCard(props: Props) {
         return;
       }
 
-      for (const p of photos) URL.revokeObjectURL(p.url);
-
       const loaded: PhotoItem[] = [];
       for (const asset of json.assets.slice(0, MAX_PROCESS_PHOTOS)) {
         const blobRes = await fetch(asset.download_url);
@@ -472,13 +567,11 @@ export function ImagesCard(props: Props) {
           assetId: asset.id,
         });
       }
-      setPhotos(loaded);
+      showLoadedPhotos(loaded, set.zone_label);
       setLoadedSetId(set.id);
       setLoadedSetName(set.zone_label);
-      setSelectedSetId(set.id);
-      props.onStatus(
-        `Loaded “${set.zone_label}” · ${loaded.length} photo(s) — Process when ready`
-      );
+      setLoadedSource("server");
+      setSelectedSetId(`server:${set.id}`);
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Load set failed");
     } finally {
@@ -489,81 +582,82 @@ export function ImagesCard(props: Props) {
   async function onSetSelectChange(nextId: string) {
     setSelectedSetId(nextId);
     if (!nextId) {
-      // Keep local photos; just detach from a saved set.
       setLoadedSetId(null);
       setLoadedSetName(null);
+      setLoadedSource(null);
       return;
     }
-    const set = sets.find((s) => s.id === nextId);
-    if (set) await loadSet(set);
+    if (nextId.startsWith("phone:")) {
+      const set = phoneSets.find((row) => row.id === nextId.slice("phone:".length));
+      if (set) await loadPhone(set);
+      return;
+    }
+    if (nextId.startsWith("server:")) {
+      const set = sets.find((row) => row.id === nextId.slice("server:".length));
+      if (set) await loadSet(set);
+    }
   }
 
-  async function deleteSetById(setId: string, setName: string) {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/survey/sets/${setId}`, {
-        method: "DELETE",
-        headers: mapperAuthHeaders(),
-      });
-      const json = (await res.json()) as { ok: boolean; error?: string };
-      if (!json.ok) {
-        props.onError(json.error || "Delete set failed");
-        setBusy(false);
-        return false;
-      }
-      if (loadedSetId === setId) {
-        clearLocalPhotos();
-        setSelectedSetId("");
-      } else if (selectedSetId === setId) {
-        setSelectedSetId("");
-      }
-      await refreshSets();
-      props.onStatus(`Deleted set “${setName}” and its photos`);
-      return true;
-    } catch (e) {
-      props.onError(e instanceof Error ? e.message : "Delete set failed");
-      return false;
-    } finally {
-      setBusy(false);
-    }
+  async function deleteServerSet(setId: string) {
+    const res = await fetch(`/api/survey/sets/${setId}`, {
+      method: "DELETE",
+      headers: mapperAuthHeaders(),
+    });
+    const json = (await res.json()) as { ok: boolean; error?: string };
+    if (!json.ok) throw new Error(json.error || "Delete set failed");
   }
 
   async function deleteSelectedSet() {
-    const id = selectedSetId || loadedSetId;
-    if (!id) {
+    if (!selectedSetId) {
       props.onError("Choose a set to delete");
       return;
     }
-    const name =
-      sets.find((s) => s.id === id)?.zone_label || loadedSetName || "this set";
+    const phoneId = selectedSetId.startsWith("phone:")
+      ? selectedSetId.slice("phone:".length)
+      : null;
+    const serverId = selectedSetId.startsWith("server:")
+      ? selectedSetId.slice("server:".length)
+      : null;
+    const phone = phoneId ? phoneSets.find((set) => set.id === phoneId) : null;
+    const server = serverId ? sets.find((set) => set.id === serverId) : null;
+    const name = phone?.name || server?.zone_label || loadedSetName || "this set";
     if (
       !window.confirm(
-        `Delete photo set “${name}” and all of its images from storage?`
+        `Delete photo set “${name}” from this phone${
+          phone?.serverSetId || server ? " and the server copy" : ""
+        }?`
       )
     ) {
       return;
     }
-    await deleteSetById(id, name);
-  }
-
-  async function retryExtract() {
-    if (!retrySetId) return;
     setBusy(true);
     props.onError(null);
     try {
-      await enqueueSet(retrySetId);
-      props.onStatus(
-        "Retry queued. You can leave this page. The draft loads into Text/speak when it is ready."
-      );
-      void watchLatestJob();
+      if (phone) {
+        await deletePhoneSet(phone.id);
+        if (phone.serverSetId && canSurvey) await deleteServerSet(phone.serverSetId);
+        setPhoneSets((prev) => prev.filter((set) => set.id !== phone.id));
+      } else if (server && canSurvey) {
+        await deleteServerSet(server.id);
+      }
+      if (
+        (phone && loadedSetId === phone.id) ||
+        (server && loadedSetId === server.id)
+      ) {
+        clearLocalPhotos();
+      }
+      setSelectedSetId("");
+      await refreshSets();
+      props.onStatus(`Deleted “${name}”`);
     } catch (e) {
-      props.onError(e instanceof Error ? e.message : "Retry failed");
+      props.onError(e instanceof Error ? e.message : "Delete set failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function runProcess() {
+    if (processLock.current) return;
     if (!props.zoneReady || !props.zoneLabel.trim()) {
       props.onError("Load or set an active zone before processing photos");
       return;
@@ -572,61 +666,26 @@ export function ImagesCard(props: Props) {
       props.onError("Add or load at least one photo");
       return;
     }
-    if (!canSurvey) {
-      await props.onProcess(photos.map((p) => p.file));
-      return;
-    }
-
-    setBusy(true);
+    processLock.current = true;
     props.onError(null);
+    setCopy({
+      phase: "phone",
+      current: 0,
+      total: photos.length,
+      label: `Saving ${photos.length} photo${photos.length === 1 ? "" : "s"} on this phone…`,
+    });
     try {
-      const res = await fetch("/api/survey/sets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...mapperAuthHeaders(),
-        },
-        body: JSON.stringify({
-          place_id: props.placeId,
-          zone_type: props.zoneType,
-          zone_label: props.zoneLabel.trim(),
-        }),
-      });
-      const created = (await res.json()) as {
-        ok: boolean;
-        set?: CaptureSet;
-        error?: string;
-      };
-      if (!created.ok || !created.set) {
-        throw new Error(created.error || "Could not save photos");
+      if (loadedSource === "phone" && loadedSetId) {
+        await persistGallery(loadedSetId, photos);
+      } else if (loadedSource !== "server") {
+        await ensurePhoneSet(photos);
       }
-      const setId = created.set.id;
-      for (let i = 0; i < photos.length; i++) {
-        props.onStatus(`Uploading photo ${i + 1} of ${photos.length}…`);
-        const file = await compressImageForUpload(photos[i].file);
-        await uploadPhotoToSet(setId, file);
-      }
-      const closed = await fetch(`/api/survey/sets/${setId}/close`, {
-        method: "POST",
-        headers: mapperAuthHeaders(),
-      });
-      const closedJson = (await closed.json()) as { ok: boolean; error?: string };
-      if (!closedJson.ok) {
-        throw new Error(closedJson.error || "Could not close photo set");
-      }
-      await enqueueSet(setId);
-      setLoadedSetId(setId);
-      setLoadedSetName(created.set.zone_label);
-      setSelectedSetId(setId);
-      await refreshSets();
-      props.onStatus(
-        `Queued ${photos.length} photo(s) for ${props.zoneType} ${props.zoneLabel}. You can leave this page. The draft loads into Text/speak when you come back.`
-      );
-      void watchLatestJob();
+      void drainUploads();
+      await props.onProcess(photos.map((photo) => photo.file));
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Process failed");
     } finally {
-      setBusy(false);
+      processLock.current = false;
     }
   }
 
@@ -636,35 +695,45 @@ export function ImagesCard(props: Props) {
     <section style={card}>
       <label style={label}>Images</label>
       <p style={{ ...hint, marginTop: 0, marginBottom: 10 }}>
-        Build a group of photos, optionally save/load a named set, then Process
-        into Text/speak for the active zone.
+        Photos stay on this phone. Process starts from them and shows each
+        photo as it finishes. A server copy uploads only while this page is open.
       </p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <select
           value={selectedSetId}
           onChange={(e) => void onSetSelectChange(e.target.value)}
-          disabled={disabled || !canSurvey}
+          disabled={disabled}
           style={{ ...input, flex: 1, minWidth: 160 }}
           aria-label="Photo set"
         >
           <option value="">
-            {canSurvey
-              ? sets.length
-                ? "Select a photo set…"
-                : "No saved sets yet"
-              : "Sign in to use photo sets"}
+            {phoneSets.length || sets.length
+              ? "Select a photo set…"
+              : "No saved sets yet"}
           </option>
-          {sets.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.zone_label} ({s.asset_count})
+          {phoneSets.map((set) => (
+            <option key={set.id} value={`phone:${set.id}`}>
+              {set.name}
             </option>
           ))}
+          {sets
+            .filter(
+              (set) => !phoneSets.some((phone) => phone.serverSetId === set.id)
+            )
+            .map((set) => (
+              <option key={set.id} value={`server:${set.id}`}>
+                {set.zone_label} ({set.asset_count}) · on server
+              </option>
+            ))}
         </select>
         <button
           type="button"
-          onClick={() => void refreshSets()}
-          disabled={disabled || !canSurvey}
+          onClick={() => {
+            void refreshPhoneSets();
+            void refreshSets();
+          }}
+          disabled={disabled}
           style={secondaryBtn}
         >
           Refresh
@@ -831,8 +900,54 @@ export function ImagesCard(props: Props) {
             disabled={disabled}
             style={{ ...secondaryBtn, marginTop: 8 }}
           >
-            {busy ? "Uploading…" : props.extractProgress ? "Processing…" : "Process photos"}
+            {props.extractProgress
+              ? "Processing…"
+              : copy?.phase === "phone"
+                ? "Saving…"
+                : "Process photos"}
           </button>
+          {copy ? (
+            <div style={{ marginTop: 12 }} role="status" aria-live="polite">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  fontSize: 15,
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{copy.label}</span>
+                {copy.total > 0 ? (
+                  <span style={{ color: "#555", whiteSpace: "nowrap" }}>
+                    {copy.current}/{copy.total}
+                  </span>
+                ) : null}
+              </div>
+              {copy.total > 0 ? (
+                <div
+                  style={{
+                    height: 10,
+                    borderRadius: 999,
+                    background: "#e8e8e8",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.round((copy.current / copy.total) * 100)}%`,
+                      background: copy.phase === "error" ? "#b71c1c" : "#111",
+                      borderRadius: 999,
+                    }}
+                  />
+                </div>
+              ) : null}
+              {copy.detail ? (
+                <p style={{ ...hint, marginTop: 8 }}>{copy.detail}</p>
+              ) : null}
+            </div>
+          ) : null}
           {props.extractProgress ? (
             <div style={{ marginTop: 12 }} role="status" aria-live="polite">
               <div
@@ -888,17 +1003,6 @@ export function ImagesCard(props: Props) {
           zone.
         </p>
       )}
-
-      {retrySetId ? (
-        <button
-          type="button"
-          onClick={() => void retryExtract()}
-          disabled={disabled}
-          style={{ ...secondaryBtn, marginTop: 8 }}
-        >
-          Retry extract
-        </button>
-      ) : null}
 
       <LiveCameraSheet
         open={cameraOpen}
