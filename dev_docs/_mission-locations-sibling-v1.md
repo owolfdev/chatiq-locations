@@ -96,6 +96,27 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-16 — Brand follow-ups see the products in the aisle
+
+**What changed:** A shopper lookup can return several products from the same aisle, and a plural such as "crackers" matches a product named "cracker". A follow-up ("what about Haitai?") is a new search. If a hit contains that brand, the bot names it instead of repeating an earlier cracker.
+
+**Next:** Ask the live bot for Haitai and for whole wheat crackers after this is deployed.
+
+```text
+chatiq-locations: [###################_] ~96% -> Confirm Haitai follow-up on the live bot
+chatiq: concierge treats a follow-up as a new search
+```
+
+### 2026-11-16 — Screen stays on during Process
+
+**What changed:** Process asks the phone to keep the display awake until the draft is ready or the run stops. The progress line says the screen stays on. Leaving the app or pressing the side button still locks it.
+
+**Next:** Phone-smoke a dozen photos with the phone set down and confirm it does not lock at 30 seconds.
+
+```text
+chatiq-locations: [###################_] ~96% -> Phone-smoke screen-awake Process
+```
+
 ### 2026-11-14 — How to find a zone
 
 **What changed:** Active zone has a **How to find it** box. Save zone stores those directions and publishes the area. Adding products no longer clears the note. The shopper bot uses the note when someone asks where that area is.

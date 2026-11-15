@@ -1107,6 +1107,20 @@ function hasWholeToken(hay: string, token: string): boolean {
   return re.test(hay);
 }
 
+/** "crackers" also matches a product named "cracker". */
+function wordForms(token: string): string[] {
+  const forms = [token];
+  if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) {
+    forms.push(token.slice(0, -1));
+  }
+  return forms;
+}
+
+function hayHasToken(hay: string, token: string): boolean {
+  if (wordForms(token).some((form) => hasWholeToken(hay, form))) return true;
+  return hay.includes(token);
+}
+
 function textMatchesQuery(haystack: string, query: string): boolean {
   const hay = normalizeSearchText(haystack);
   const q = normalizeSearchText(query);
@@ -1121,8 +1135,11 @@ function textMatchesQuery(haystack: string, query: string): boolean {
   }
   const tokens = queryTokens(q);
   if (tokens.length === 0) return false;
-  // Single token: whole-word only
-  if (tokens.length === 1) return hasWholeToken(hay, tokens[0]);
+  // Single token: whole word only, so "scott" does not match "scottish".
+  // A plural still matches the singular product ("crackers" → "cracker").
+  if (tokens.length === 1) {
+    return wordForms(tokens[0]).some((form) => hasWholeToken(hay, form));
+  }
   // All tokens, or last token as primary noun when distinctive (≥6): "breakfast cereal"
   if (tokens.every((t) => hay.includes(t))) return true;
   const primary = tokens[tokens.length - 1];
@@ -1142,10 +1159,10 @@ function textMatchesQuery(haystack: string, query: string): boolean {
       distinctive.length > 0 ? distinctive : withoutGeneric;
     return (
       required.length > 0 &&
-      required.every((t) => hasWholeToken(hay, t) || hay.includes(t))
+      required.every((t) => hayHasToken(hay, t))
     );
   }
-  return primary.length >= 6 && hasWholeToken(hay, primary);
+  return primary.length >= 6 && hayHasToken(hay, primary);
 }
 
 /** Softer match for zone labels (e.g. "deli meat" → Delicatessen, "friut" → Fruit). */
@@ -1194,10 +1211,12 @@ export async function resolveItem(input: {
     matched_name: string;
     near_landmark: string | null;
   }>;
+  /** True only when a search hit the safety ceiling and some matches were left out. */
+  truncated: boolean;
 }> {
   const query = input.item_query.trim();
   if (!query) {
-    return { matches: [] };
+    return { matches: [], truncated: false };
   }
 
   const supabase = client();
@@ -1260,6 +1279,9 @@ export async function resolveItem(input: {
     if (t === "shelf") return 2;
     return 3;
   }
+  // Every matching product is returned. The ceiling only stops a runaway query.
+  const MAX_ITEM_MATCHES = 200;
+  let truncated = false;
   const zoneMatches: Match[] = [];
   const itemMatches: Match[] = [];
   const matchedZones = new Set<string>();
@@ -1298,6 +1320,10 @@ export async function resolveItem(input: {
       ? pub.items_snapshot
       : [];
     for (const item of snapshot) {
+      if (itemMatches.length >= MAX_ITEM_MATCHES) {
+        truncated = true;
+        break;
+      }
       const name =
         typeof item?.canonical_name === "string"
           ? item.canonical_name
@@ -1307,19 +1333,24 @@ export async function resolveItem(input: {
       if (!name) continue;
       const brand = typeof item?.brand === "string" ? item.brand : "";
       if (textMatchesQuery(`${name} ${brand}`, query)) {
+        const brandText = brand.trim();
+        const shown =
+          brandText &&
+          !normalizeSearchText(name).includes(normalizeSearchText(brandText))
+            ? `${brandText} ${name}`
+            : name;
         itemMatches.push({
           zone_id: zoneId,
           zone_type: zoneType,
           zone_label: zoneLabel,
           where: formatWhere(zoneType, zoneLabel),
           publication_id: pub.id as string,
-          matched_name: name,
+          matched_name: shown,
           near_landmark: near,
         });
-        matchedZones.add(zoneId);
-        break;
       }
     }
+    if (truncated) break;
   }
 
   let matches = [...zoneMatches, ...itemMatches];
@@ -1336,8 +1367,7 @@ export async function resolveItem(input: {
   if (distinctive.length >= 2) {
     const score = (name: string) => {
       const hay = normalizeSearchText(name);
-      return distinctive.filter((t) => hasWholeToken(hay, t) || hay.includes(t))
-        .length;
+      return distinctive.filter((t) => hayHasToken(hay, t)).length;
     };
     const scored = matches.map((m) => ({ m, n: score(m.matched_name) }));
     const best = scored.reduce((max, s) => Math.max(max, s.n), 0);
@@ -1348,7 +1378,7 @@ export async function resolveItem(input: {
     const brand = distinctive[0];
     const withBrand = matches.filter((m) => {
       const hay = normalizeSearchText(m.matched_name);
-      return hasWholeToken(hay, brand) || hay.includes(brand);
+      return hayHasToken(hay, brand);
     });
     if (withBrand.length > 0) {
       matches = withBrand;
@@ -1356,7 +1386,7 @@ export async function resolveItem(input: {
   }
 
   matches.sort((a, b) => matchRank(a.zone_type) - matchRank(b.zone_type));
-  return { matches };
+  return { matches, truncated };
 }
 
 export async function getPlaceMap(place_id: string): Promise<{
