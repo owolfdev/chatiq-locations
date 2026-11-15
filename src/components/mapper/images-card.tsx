@@ -25,6 +25,7 @@ import {
   setPhoneServerSetId,
   type PhonePhotoSet,
 } from "@/lib/survey/phone-photo-store";
+import { holdScreenAwake } from "@/lib/survey/screen-awake";
 import { MAX_ASSETS_PER_CAPTURE_SET } from "@/lib/supabase/tables";
 import { MAX_PROCESS_PHOTOS } from "@/lib/vision/constants";
 
@@ -103,6 +104,8 @@ export function ImagesCard(props: Props) {
   const drainLock = useRef(false);
   const drainAgain = useRef(false);
   const processLock = useRef(false);
+  const releaseScreen = useRef<(() => void) | null>(null);
+  const [screenHeld, setScreenHeld] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef(photos);
@@ -111,6 +114,7 @@ export function ImagesCard(props: Props) {
   useEffect(() => {
     return () => {
       for (const p of photosRef.current) URL.revokeObjectURL(p.url);
+      releaseScreen.current?.();
     };
   }, []);
 
@@ -659,6 +663,11 @@ export function ImagesCard(props: Props) {
     }
     processLock.current = true;
     props.onError(null);
+    const screen = holdScreenAwake();
+    releaseScreen.current = screen.release;
+    void screen.acquired.then((held) => {
+      if (releaseScreen.current === screen.release) setScreenHeld(held);
+    });
     setCopy({
       phase: "phone",
       current: 0,
@@ -676,6 +685,9 @@ export function ImagesCard(props: Props) {
     } catch (e) {
       props.onError(e instanceof Error ? e.message : "Process failed");
     } finally {
+      screen.release();
+      if (releaseScreen.current === screen.release) releaseScreen.current = null;
+      setScreenHeld(false);
       processLock.current = false;
     }
   }
@@ -980,6 +992,11 @@ export function ImagesCard(props: Props) {
                 {" · "}
                 {props.extractProgress.etaLabel}
               </p>
+              {screenHeld ? (
+                <p style={{ ...hint, marginTop: 4 }}>
+                  Screen stays on until this finishes. Leave this page open.
+                </p>
+              ) : null}
             </div>
           ) : (
             <p style={hint}>
