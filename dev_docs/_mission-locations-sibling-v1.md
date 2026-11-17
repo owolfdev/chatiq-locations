@@ -96,6 +96,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-18 — What's here, plus how to find it
+
+**What changed:** Active zone has a **What's here** box (`zone_description`) beside **How to find it**. A shopper search matches the summary, so "beer" can find an aisle whose summary says "beer, craft beer". Directions stay a separate note.
+
+**Next:** Save both notes on a real aisle and ask the bot for the summary and for directions.
+
+```text
+chatiq-locations: [###################_] ~96% -> Phone-smoke zone summary + directions
+chatiq: concierge speaks the inventory line and the directions separately
+```
+
 ### 2026-11-16 — Brand follow-ups see the products in the aisle
 
 **What changed:** A shopper lookup can return several products from the same aisle, and a plural such as "crackers" matches a product named "cracker". A follow-up ("what about Haitai?") is a new search. If a hit contains that brand, the bot names it instead of repeating an earlier cracker.

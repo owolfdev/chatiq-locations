@@ -137,6 +137,7 @@ export function MapperClient(props: Props) {
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [zoneType, setZoneType] = useState("aisle");
   const [zoneLabel, setZoneLabel] = useState("");
+  const [zoneSummary, setZoneSummary] = useState("");
   const [zoneNote, setZoneNote] = useState("");
   const [coords, setCoords] = useState<{
     lat: number;
@@ -213,6 +214,7 @@ export function MapperClient(props: Props) {
     setActiveZoneId(z.id);
     setZoneType(z.zone_type);
     setZoneLabel(z.zone_label);
+    setZoneSummary(z.zone_description || "");
     setZoneNote(z.near_landmark || "");
     setInspectId(z.id);
     setStatus(`Active zone · ${z.zone_type} ${z.zone_label}`);
@@ -269,6 +271,7 @@ export function MapperClient(props: Props) {
         place_id: props.placeId,
         zone_type: zoneType,
         zone_label: zoneLabel.trim(),
+        zone_description: zoneSummary,
         near_landmark: zoneNote,
       });
       if (!res.ok) {
@@ -750,6 +753,7 @@ export function MapperClient(props: Props) {
               const id = e.target.value;
               if (!id) {
                 setActiveZoneId(null);
+                setZoneSummary("");
                 setZoneNote("");
                 setInspectId(null);
                 setInspectItems([]);
@@ -797,6 +801,17 @@ export function MapperClient(props: Props) {
           />
         </div>
         <label style={{ ...label, marginTop: 10 }}>
+          What's here
+          <textarea
+            value={zoneSummary}
+            onChange={(e) => setZoneSummary(e.target.value)}
+            placeholder="beer, craft beer"
+            aria-label="What is in this area"
+            rows={2}
+            style={{ ...input, width: "100%", marginTop: 6, resize: "vertical" }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
           How to find it
           <textarea
             value={zoneNote}
@@ -834,7 +849,7 @@ export function MapperClient(props: Props) {
           </button>
         </div>
         <p style={hint}>
-          Save zone publishes how to find this area. A shopper who asks where it is hears this. Add or Replace publishes the products.
+          Save zone publishes what's here and how to find it. A shopper can ask for something in the summary, or ask where the area is. Add or Replace publishes the products.
         </p>
       </section>
 

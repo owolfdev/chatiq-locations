@@ -291,6 +291,8 @@ export async function saveMapperZone(input: {
   place_id: string;
   zone_type: string;
   zone_label: string;
+  /** Short inventory line, e.g. "beer, craft beer". Empty clears it. */
+  zone_description?: string | null;
   /** Directions for finding this area. Empty clears them. */
   near_landmark?: string | null;
 }): Promise<
@@ -310,6 +312,7 @@ export async function saveMapperZone(input: {
       layout_version_id,
       zone_type: input.zone_type,
       zone_label: input.zone_label,
+      zone_description: input.zone_description ?? "",
       near_landmark: input.near_landmark ?? "",
     });
     await publishZone({ team_id: place.team_id, zone_id: zone.id });

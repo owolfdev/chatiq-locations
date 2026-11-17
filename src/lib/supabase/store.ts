@@ -1212,6 +1212,8 @@ export async function resolveItem(input: {
     publication_id: string;
     matched_name: string;
     near_landmark: string | null;
+    /** Short inventory line for the area, e.g. "beer, craft beer". */
+    zone_description: string | null;
   }>;
   /** True only when a search hit the safety ceiling and some matches were left out. */
   truncated: boolean;
@@ -1236,18 +1238,24 @@ export async function resolveItem(input: {
   const zoneIds = [...new Set((pubs || []).map((p) => p.zone_id as string))];
   const zoneById = new Map<
     string,
-    { zone_type: string; zone_label: string; near_landmark: string | null }
+    {
+      zone_type: string;
+      zone_label: string;
+      near_landmark: string | null;
+      zone_description: string | null;
+    }
   >();
   if (zoneIds.length > 0) {
     const { data: zones } = await supabase
       .from(LOCATIONS_TABLES.zones)
-      .select("id, zone_type, zone_label, near_landmark")
+      .select("id, zone_type, zone_label, near_landmark, zone_description")
       .in("id", zoneIds);
     for (const z of zones || []) {
       zoneById.set(z.id as string, {
         zone_type: (z.zone_type as string) || "zone",
         zone_label: (z.zone_label as string) || "",
         near_landmark: (z.near_landmark as string) || null,
+        zone_description: (z.zone_description as string) || null,
       });
     }
   }
@@ -1261,6 +1269,7 @@ export async function resolveItem(input: {
     publication_id: string;
     matched_name: string;
     near_landmark: string | null;
+    zone_description: string | null;
   };
 
   function formatWhere(zoneType: string, zoneLabel: string): string {
@@ -1295,6 +1304,7 @@ export async function resolveItem(input: {
     const zoneType = zone?.zone_type || "zone";
     const zoneLabel = zone?.zone_label || "";
     const near = zone?.near_landmark || null;
+    const summary = zone?.zone_description?.trim() || null;
     const zoneHay = `${zoneType} ${zoneLabel}`;
     if (zoneLabelMatchesQuery(zoneHay, query)) {
       zoneMatches.push({
@@ -1305,8 +1315,20 @@ export async function resolveItem(input: {
         publication_id: pub.id as string,
         matched_name: zoneLabel || (pub.title as string) || "this section",
         near_landmark: near,
+        zone_description: summary,
       });
       matchedZones.add(zoneId);
+    } else if (summary && textMatchesQuery(summary, query)) {
+      zoneMatches.push({
+        zone_id: zoneId,
+        zone_type: zoneType,
+        zone_label: zoneLabel,
+        where: formatWhere(zoneType, zoneLabel),
+        publication_id: pub.id as string,
+        matched_name: summary,
+        near_landmark: near,
+        zone_description: summary,
+      });
     }
   }
 
@@ -1318,6 +1340,7 @@ export async function resolveItem(input: {
     const zoneType = zone?.zone_type || "zone";
     const zoneLabel = zone?.zone_label || "";
     const near = zone?.near_landmark || null;
+    const summary = zone?.zone_description?.trim() || null;
     const snapshot = Array.isArray(pub.items_snapshot)
       ? pub.items_snapshot
       : [];
@@ -1349,6 +1372,7 @@ export async function resolveItem(input: {
           publication_id: pub.id as string,
           matched_name: shown,
           near_landmark: near,
+          zone_description: summary,
         });
       }
     }
