@@ -172,11 +172,12 @@ export async function executeLocationsCommand(
           : undefined;
         const place = await updatePlace({
           place_id,
-          name: slotString(slots, "name") || undefined,
-          address:
-            slots.address === null
-              ? null
-              : slotString(slots, "address") || undefined,
+          name: slotIfPresent(slots, "name") || undefined,
+          address: slotIfPresent(slots, "address"),
+          phone: slotIfPresent(slots, "phone"),
+          website: slotIfPresent(slots, "website"),
+          contact: slotIfPresent(slots, "contact"),
+          notes: slotIfPresent(slots, "notes"),
           is_active:
             typeof slots.is_active === "boolean" ? slots.is_active : undefined,
           bot_ids,

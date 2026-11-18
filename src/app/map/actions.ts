@@ -13,6 +13,7 @@ import {
   ensureActiveLayout,
   getPlace,
   listZoneItems,
+  updatePlace,
   listZonesForPlace,
   publishZone,
   removeZoneItem,
@@ -282,6 +283,64 @@ export async function clearMapperZoneItems(input: {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Clear zone failed",
+    };
+  }
+}
+
+/** Store-level details. Empty strings clear optional fields. */
+export async function saveMapperPlace(input: {
+  place_id: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  contact?: string | null;
+  notes?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      place: {
+        id: string;
+        name: string;
+        address: string | null;
+        phone: string | null;
+        website: string | null;
+        contact: string | null;
+        notes: string | null;
+      };
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "Enter a store name" };
+    const place = await updatePlace({
+      place_id: input.place_id,
+      name,
+      address: input.address ?? "",
+      phone: input.phone ?? "",
+      website: input.website ?? "",
+      contact: input.contact ?? "",
+      notes: input.notes ?? "",
+    });
+    return {
+      ok: true,
+      place: {
+        id: place.id,
+        name: place.name,
+        address: place.address,
+        phone: place.phone,
+        website: place.website,
+        contact: place.contact,
+        notes: place.notes,
+      },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Save store failed",
     };
   }
 }

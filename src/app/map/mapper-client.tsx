@@ -20,6 +20,7 @@ import {
   refreshMapperZones,
   removeMapperItem,
   renameMapperZone,
+  saveMapperPlace,
   saveMapperZone,
   type MapperPose,
 } from "./actions";
@@ -124,6 +125,10 @@ type Props = {
   placeId: string;
   placeName: string;
   placeAddress: string | null;
+  placePhone: string | null;
+  placeWebsite: string | null;
+  placeContact: string | null;
+  placeNotes: string | null;
   initialZones: ZoneListRow[];
   layoutVersionId: string | null;
   places: Array<{ id: string; name: string }>;
@@ -133,6 +138,12 @@ type Props = {
 export function MapperClient(props: Props) {
   const router = useRouter();
   const [zones, setZones] = useState(props.initialZones);
+  const [storeName, setStoreName] = useState(props.placeName);
+  const [storeAddress, setStoreAddress] = useState(props.placeAddress || "");
+  const [storePhone, setStorePhone] = useState(props.placePhone || "");
+  const [storeWebsite, setStoreWebsite] = useState(props.placeWebsite || "");
+  const [storeContact, setStoreContact] = useState(props.placeContact || "");
+  const [storeNotes, setStoreNotes] = useState(props.placeNotes || "");
   const [text, setText] = useState("");
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [zoneType, setZoneType] = useState("aisle");
@@ -260,6 +271,36 @@ export function MapperClient(props: Props) {
       setInspectId(res.zone.id);
     });
   }, [text, zoneType, zoneLabel, saveMode, pose, props.placeId]);
+
+  function onSaveStore() {
+    if (!storeName.trim()) {
+      setError("Enter a store name");
+      return;
+    }
+    startTransition(async () => {
+      const res = await saveMapperPlace({
+        place_id: props.placeId,
+        name: storeName,
+        address: storeAddress,
+        phone: storePhone,
+        website: storeWebsite,
+        contact: storeContact,
+        notes: storeNotes,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setStoreName(res.place.name);
+      setStoreAddress(res.place.address || "");
+      setStorePhone(res.place.phone || "");
+      setStoreWebsite(res.place.website || "");
+      setStoreContact(res.place.contact || "");
+      setStoreNotes(res.place.notes || "");
+      setStatus(`Store saved · ${res.place.name}`);
+      setError(null);
+    });
+  }
 
   function onSaveZone() {
     if (!zoneLabel.trim()) {
@@ -670,10 +711,7 @@ export function MapperClient(props: Props) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <header>
         <p style={eyebrow}>Store mapper</p>
-        <h1 style={{ margin: "0 0 4px", fontSize: "1.75rem" }}>{props.placeName}</h1>
-        {props.placeAddress ? (
-          <p style={{ margin: 0, color: "#666", fontSize: 15 }}>{props.placeAddress}</p>
-        ) : null}
+        <h1 style={{ margin: "0 0 4px", fontSize: "1.75rem" }}>{storeName}</h1>
         {props.places.length > 0 ? (
           <label style={{ display: "block", marginTop: 12, fontSize: 14 }}>
             Store
@@ -715,6 +753,84 @@ export function MapperClient(props: Props) {
           <a href="/api/auth/logout">Sign out</a>
         </p>
       </header>
+
+      <section style={card}>
+        <label style={label}>This store</label>
+        <p style={{ ...hint, marginTop: 0 }}>
+          Contact details for the store itself. Aisle notes stay on the zone below.
+        </p>
+        <label style={label}>
+          Name
+          <input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            aria-label="Store name"
+            style={{ ...input, width: "100%", marginTop: 6 }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
+          Address
+          <textarea
+            value={storeAddress}
+            onChange={(e) => setStoreAddress(e.target.value)}
+            placeholder="3522 Lat Phrao Rd, Bang Kapi, Bangkok"
+            aria-label="Store address"
+            rows={2}
+            style={{ ...input, width: "100%", marginTop: 6, resize: "vertical" }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
+          Phone
+          <input
+            value={storePhone}
+            onChange={(e) => setStorePhone(e.target.value)}
+            placeholder="02 000 0000"
+            aria-label="Store phone"
+            inputMode="tel"
+            style={{ ...input, width: "100%", marginTop: 6 }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
+          Website
+          <input
+            value={storeWebsite}
+            onChange={(e) => setStoreWebsite(e.target.value)}
+            placeholder="https://example.com"
+            aria-label="Store website"
+            inputMode="url"
+            style={{ ...input, width: "100%", marginTop: 6 }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
+          Contact
+          <input
+            value={storeContact}
+            onChange={(e) => setStoreContact(e.target.value)}
+            placeholder="Store desk or an email"
+            aria-label="Store contact"
+            style={{ ...input, width: "100%", marginTop: 6 }}
+          />
+        </label>
+        <label style={{ ...label, marginTop: 10 }}>
+          Notes
+          <textarea
+            value={storeNotes}
+            onChange={(e) => setStoreNotes(e.target.value)}
+            placeholder="Open until 10pm. Parking is behind the store."
+            aria-label="Store notes"
+            rows={2}
+            style={{ ...input, width: "100%", marginTop: 6, resize: "vertical" }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onSaveStore}
+          disabled={pending || !storeName.trim()}
+          style={{ ...primaryBtn, marginTop: 10 }}
+        >
+          Save store
+        </button>
+      </section>
 
       <section style={card}>
         <div style={{ fontSize: 15, lineHeight: 1.5, color: "#555" }}>

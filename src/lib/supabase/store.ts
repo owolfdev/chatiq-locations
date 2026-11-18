@@ -34,8 +34,15 @@ export type PlaceRow = {
   primary_bot_id: string | null;
   name: string;
   address: string | null;
+  phone: string | null;
+  website: string | null;
+  contact: string | null;
+  notes: string | null;
   is_active: boolean;
 };
+
+const PLACE_COLUMNS =
+  "id, team_id, primary_bot_id, name, address, phone, website, contact, notes, is_active";
 
 export type ZoneRow = {
   id: string;
@@ -77,7 +84,7 @@ export async function createPlace(input: {
       primary_bot_id: input.primary_bot_id || null,
     })
     .select(
-      "id, team_id, primary_bot_id, name, address, is_active"
+      PLACE_COLUMNS
     )
     .single();
 
@@ -124,6 +131,10 @@ export async function updatePlace(input: {
   place_id: string;
   name?: string;
   address?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  contact?: string | null;
+  notes?: string | null;
   is_active?: boolean;
   bot_ids?: string[];
 }): Promise<PlaceRow> {
@@ -131,6 +142,10 @@ export async function updatePlace(input: {
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) patch.name = input.name.trim();
   if (input.address !== undefined) patch.address = input.address?.trim() || null;
+  if (input.phone !== undefined) patch.phone = input.phone?.trim() || null;
+  if (input.website !== undefined) patch.website = input.website?.trim() || null;
+  if (input.contact !== undefined) patch.contact = input.contact?.trim() || null;
+  if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
   if (input.is_active !== undefined) patch.is_active = input.is_active;
 
   const { data, error } = await supabase
@@ -138,7 +153,7 @@ export async function updatePlace(input: {
     .update(patch)
     .eq("id", input.place_id)
     .select(
-      "id, team_id, primary_bot_id, name, address, is_active"
+      PLACE_COLUMNS
     )
     .maybeSingle();
 
@@ -181,7 +196,7 @@ export async function listPlacesForTeam(input: {
   const supabase = client();
   const { data, error } = await supabase
     .from(LOCATIONS_TABLES.places)
-    .select("id, team_id, primary_bot_id, name, address, is_active")
+    .select(PLACE_COLUMNS)
     .eq("team_id", input.team_id)
     .eq("is_active", true)
     .order("name");
@@ -243,7 +258,7 @@ export async function bindBotToPlace(input: {
       })
       .eq("id", input.place_id)
       .eq("team_id", team_id)
-      .select("id, team_id, primary_bot_id, name, address, is_active")
+      .select(PLACE_COLUMNS)
       .single();
     if (error || !data) {
       throw new LocationsStoreError(
@@ -287,7 +302,7 @@ export async function listPlacesForBot(input: {
 
   let primaryQuery = supabase
     .from(LOCATIONS_TABLES.places)
-    .select("id, team_id, primary_bot_id, name, address, is_active")
+    .select(PLACE_COLUMNS)
     .eq("is_active", true)
     .eq("primary_bot_id", input.bot_id);
   if (input.team_id) primaryQuery = primaryQuery.eq("team_id", input.team_id);
@@ -302,7 +317,7 @@ export async function listPlacesForBot(input: {
 
   let byId = supabase
     .from(LOCATIONS_TABLES.places)
-    .select("id, team_id, primary_bot_id, name, address, is_active")
+    .select(PLACE_COLUMNS)
     .eq("is_active", true)
     .in("id", [...idSet])
     .order("name");
@@ -326,7 +341,7 @@ export async function getPlace(place_id: string): Promise<PlaceRow> {
   const supabase = client();
   const { data, error } = await supabase
     .from(LOCATIONS_TABLES.places)
-    .select("id, team_id, primary_bot_id, name, address, is_active")
+    .select(PLACE_COLUMNS)
     .eq("id", place_id)
     .maybeSingle();
   if (error) {

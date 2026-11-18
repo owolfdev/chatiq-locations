@@ -96,6 +96,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-19 — Store contact details
+
+**What changed:** The mapper has a This store section: name, address, phone, website, contact, and notes. These sit on the place, separate from aisle notes. A shopper who asks for the address or phone is answered from those fields.
+
+**Next:** Apply the place-contact migration, then save a store and ask the bot for its phone.
+
+```text
+chatiq-locations: [###################_] ~96% -> Apply place-contact migration + phone-smoke
+chatiq: concierge can quote stored store contact details
+```
+
 ### 2026-11-18 — What's here, plus how to find it
 
 **What changed:** Active zone has a **What's here** box (`zone_description`) beside **How to find it**. A shopper search matches the summary, so "beer" can find an aisle whose summary says "beer, craft beer". Directions stay a separate note.
