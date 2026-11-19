@@ -239,7 +239,7 @@ export function PromotionsClient(props: Props) {
       <section style={card}>
         <label style={label}>Store logo</label>
         <p style={{ ...hint, marginTop: 0 }}>
-          The branding image for this branch. It stays with every promotion.
+          The branding image for this branch. Generated pictures are asked to include it.
         </p>
         {logoUrl ? (
           <img

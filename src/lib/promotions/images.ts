@@ -45,17 +45,27 @@ export async function storePromotionImage(input: {
 
 const IMAGE_MODELS = ["gpt-image-1.5", "chatgpt-image-latest"];
 
+export type PromotionLogoFile = {
+  bytes: Buffer;
+  mime: string;
+  filename: string;
+};
+
 export async function generatePromotionImageBytes(
-  prompt: string
+  prompt: string,
+  logo?: PromotionLogoFile | null
 ): Promise<{ bytes: Buffer; mime: string }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Image generation is not configured");
   const text = prompt.trim();
   if (!text) throw new Error("Enter a prompt");
+  const instruction = logo
+    ? `The attached image is the store logo. Include that logo in the promotional image. Keep its shapes, colors, and any lettering as close to the attached image as you can.\n\n${text}`
+    : text;
 
   let lastError = "Image generation failed";
   for (const model of IMAGE_MODELS) {
-    const generated = await requestImage(apiKey, text, model);
+    const generated = await requestImage(apiKey, instruction, model, logo);
     if ("bytes" in generated) return generated;
     lastError = generated.error;
   }
@@ -65,22 +75,29 @@ export async function generatePromotionImageBytes(
 async function requestImage(
   apiKey: string,
   prompt: string,
-  model: string
+  model: string,
+  logo?: PromotionLogoFile | null
 ): Promise<{ bytes: Buffer; mime: string } | { error: string }> {
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      prompt,
-      size: "1024x1024",
-      quality: "medium",
-      output_format: "jpeg",
-    }),
-  });
+  const response = logo
+    ? await fetch("https://api.openai.com/v1/images/edits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: logoEditBody({ model, prompt, logo }),
+      })
+    : await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          prompt,
+          size: "1024x1024",
+          quality: "medium",
+          output_format: "jpeg",
+        }),
+      });
   const detail = await response.text().catch(() => "");
   if (!response.ok) {
     console.warn(
@@ -100,6 +117,38 @@ async function requestImage(
   const b64 = payload.data?.[0]?.b64_json;
   if (!b64) return { error: "Image generation returned no image" };
   return { bytes: Buffer.from(b64, "base64"), mime: "image/jpeg" };
+}
+
+export async function downloadStoredPromotionImage(
+  imagePath: string
+): Promise<Buffer | null> {
+  const supabase = createLocationsAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase.storage
+    .from(LOCATIONS_PROMOTIONS_BUCKET)
+    .download(imagePath);
+  if (error || !data) return null;
+  return Buffer.from(await data.arrayBuffer());
+}
+
+function logoEditBody(input: {
+  model: string;
+  prompt: string;
+  logo: PromotionLogoFile;
+}): FormData {
+  const form = new FormData();
+  form.set("model", input.model);
+  form.set("prompt", input.prompt);
+  form.set("size", "1024x1024");
+  form.set("quality", "medium");
+  form.set("output_format", "jpeg");
+  form.set("input_fidelity", "high");
+  form.append(
+    "image",
+    new Blob([new Uint8Array(input.logo.bytes)], { type: input.logo.mime }),
+    input.logo.filename
+  );
+  return form;
 }
 
 function imageErrorMessage(detail: string, status: number): string {

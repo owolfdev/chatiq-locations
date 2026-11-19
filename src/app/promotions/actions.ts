@@ -2,12 +2,15 @@
 
 import { guardPlace } from "@/lib/auth/mapper-place-guard";
 import {
+  downloadStoredPromotionImage,
   generatePromotionImageBytes,
   storePromotionImage,
+  type PromotionLogoFile,
 } from "@/lib/promotions/images";
 import {
   deletePromotion,
   getPlace,
+  getPlaceLogo,
   listPromotionsForPlace,
   savePromotion,
   setPlaceLogo,
@@ -23,6 +26,13 @@ const MIME_FROM_DATA_URL: Record<string, string> = {
   "image/png": "image/png",
   "image/webp": "image/webp",
 };
+
+function mimeFromPath(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  return "image/png";
+}
 
 function decodeDataUrl(dataUrl: string): { bytes: Buffer; mime: string } | null {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
@@ -112,7 +122,18 @@ export async function generatePlacePromotionImage(input: {
   try {
     const denied = await guardPlace(input.place_id);
     if (denied) return { ok: false, error: denied };
-    const generated = await generatePromotionImageBytes(input.prompt);
+    const logo = await getPlaceLogo(input.place_id);
+    let logoFile: PromotionLogoFile | null = null;
+    if (logo.image_path) {
+      const logoBytes = await downloadStoredPromotionImage(logo.image_path);
+      if (!logoBytes) throw new Error("Could not read the store logo");
+      logoFile = {
+        bytes: logoBytes,
+        mime: mimeFromPath(logo.image_path),
+        filename: logo.image_path.split("/").pop() || "logo.png",
+      };
+    }
+    const generated = await generatePromotionImageBytes(input.prompt, logoFile);
     const stored = await storePromotionImage({
       placeId: input.place_id,
       bytes: generated.bytes,
