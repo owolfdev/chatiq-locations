@@ -44,6 +44,9 @@ export async function storePromotionImage(input: {
 }
 
 const IMAGE_MODELS = ["gpt-image-1.5", "chatgpt-image-latest"];
+const IMAGE_SIZE = "1536x1024";
+const FRAME =
+  "Show the complete design in one frame. Leave a clear margin on every side. Every word, the logo, and the product must be fully visible, with nothing cut off or touching the edge. If something does not fit, make it smaller.";
 
 export type PromotionLogoFile = {
   bytes: Buffer;
@@ -60,8 +63,8 @@ export async function generatePromotionImageBytes(
   const text = prompt.trim();
   if (!text) throw new Error("Enter a prompt");
   const instruction = logo
-    ? `The attached image is the store logo. Include that logo in the promotional image. Keep its shapes, colors, and any lettering as close to the attached image as you can.\n\n${text}`
-    : text;
+    ? `The attached image is the store logo. Include that logo in the promotional image. Keep its shapes, colors, and any lettering as close to the attached image as you can.\n\n${FRAME}\n\n${text}`
+    : `${FRAME}\n\n${text}`;
 
   let lastError = "Image generation failed";
   for (const model of IMAGE_MODELS) {
@@ -93,7 +96,7 @@ async function requestImage(
         body: JSON.stringify({
           model,
           prompt,
-          size: "1024x1024",
+          size: IMAGE_SIZE,
           quality: "medium",
           output_format: "jpeg",
         }),
@@ -139,7 +142,7 @@ function logoEditBody(input: {
   const form = new FormData();
   form.set("model", input.model);
   form.set("prompt", input.prompt);
-  form.set("size", "1024x1024");
+  form.set("size", IMAGE_SIZE);
   form.set("quality", "medium");
   form.set("output_format", "jpeg");
   form.set("input_fidelity", "high");
