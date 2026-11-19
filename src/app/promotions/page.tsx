@@ -1,3 +1,5 @@
+export const maxDuration = 60;
+
 import { loadPlacePage } from "@/lib/auth/load-place-page";
 import { getPlaceLogo, listPromotionsForPlace } from "@/lib/supabase/store";
 
