@@ -1,5 +1,7 @@
 "use server";
 
+export const maxDuration = 60;
+
 import { guardPlace } from "@/lib/auth/mapper-place-guard";
 import {
   generatePromotionImageBytes,

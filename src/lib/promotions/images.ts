@@ -43,6 +43,8 @@ export async function storePromotionImage(input: {
   return { imagePath, imageUrl };
 }
 
+const IMAGE_MODELS = ["gpt-image-1.5", "chatgpt-image-latest"];
+
 export async function generatePromotionImageBytes(
   prompt: string
 ): Promise<{ bytes: Buffer; mime: string }> {
@@ -51,43 +53,62 @@ export async function generatePromotionImageBytes(
   const text = prompt.trim();
   if (!text) throw new Error("Enter a prompt");
 
-  const generated = await requestImage(apiKey, text, "gpt-image-1");
-  if (generated) return generated;
-  const fallback = await requestImage(apiKey, text, "dall-e-3");
-  if (fallback) return fallback;
-  throw new Error("Image generation failed");
+  let lastError = "Image generation failed";
+  for (const model of IMAGE_MODELS) {
+    const generated = await requestImage(apiKey, text, model);
+    if ("bytes" in generated) return generated;
+    lastError = generated.error;
+  }
+  throw new Error(lastError);
 }
 
 async function requestImage(
   apiKey: string,
   prompt: string,
   model: string
-): Promise<{ bytes: Buffer; mime: string } | null> {
-  const body: Record<string, unknown> = {
-    model,
-    prompt,
-    size: "1024x1024",
-  };
-  if (model === "gpt-image-1") body.quality = "medium";
-  if (model === "dall-e-3") body.response_format = "b64_json";
-
+): Promise<{ bytes: Buffer; mime: string } | { error: string }> {
   const response = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model,
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+      output_format: "jpeg",
+    }),
   });
+  const detail = await response.text().catch(() => "");
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.warn("[promotions] image generation failed", model, response.status, detail.slice(0, 180));
-    return null;
+    console.warn(
+      "[promotions] image generation failed",
+      model,
+      response.status,
+      detail.slice(0, 180)
+    );
+    return { error: imageErrorMessage(detail, response.status) };
   }
-  const payload = (await response.json()) as {
-    data?: Array<{ b64_json?: string }>;
-  };
+  let payload: { data?: Array<{ b64_json?: string }> } = {};
+  try {
+    payload = JSON.parse(detail) as { data?: Array<{ b64_json?: string }> };
+  } catch {
+    return { error: "Image generation returned an unreadable response" };
+  }
   const b64 = payload.data?.[0]?.b64_json;
-  if (!b64) return null;
-  return { bytes: Buffer.from(b64, "base64"), mime: "image/png" };
+  if (!b64) return { error: "Image generation returned no image" };
+  return { bytes: Buffer.from(b64, "base64"), mime: "image/jpeg" };
+}
+
+function imageErrorMessage(detail: string, status: number): string {
+  try {
+    const parsed = JSON.parse(detail) as { error?: { message?: string } };
+    const message = parsed.error?.message?.trim();
+    if (message) return message.slice(0, 240);
+  } catch {
+    // The body was not JSON.
+  }
+  return `Image generation failed (${status})`;
 }
