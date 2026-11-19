@@ -30,6 +30,7 @@ type Draft = {
   imagePrompt: string;
   startsLocal: string;
   durationDays: string;
+  sendEveryMatch: boolean;
 };
 
 function pad(n: number): string {
@@ -50,6 +51,7 @@ function blankDraft(): Draft {
     imagePrompt: "",
     startsLocal: toLocalInput(new Date()),
     durationDays: "7",
+    sendEveryMatch: false,
   };
 }
 
@@ -69,6 +71,7 @@ function draftFromPromotion(row: PromotionRow): Draft {
     imagePrompt: row.image_prompt || "",
     startsLocal: toLocalInput(start),
     durationDays: String(days),
+    sendEveryMatch: row.send_every_match === true,
   };
 }
 
@@ -119,6 +122,7 @@ export function PromotionsClient(props: Props) {
         image_prompt: draft.imagePrompt,
         starts_at: new Date(draft.startsLocal).toISOString(),
         ends_at: end.toISOString(),
+        send_every_match: draft.sendEveryMatch,
       });
       if (!res.ok) {
         setError(res.error);
@@ -371,6 +375,18 @@ export function PromotionsClient(props: Props) {
             ? `Ends ${end.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
             : "Enter a start and a duration."}
         </p>
+        <label style={{ ...hint, display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <input
+            type="checkbox"
+            checked={draft.sendEveryMatch}
+            onChange={(e) => patch({ sendEveryMatch: e.target.checked })}
+            aria-label="Send every time the keyword matches"
+            style={{ marginTop: 3 }}
+          />
+          <span>
+            Send every time the keyword matches. Leave this off so a shopper gets the offer once per conversation.
+          </span>
+        </label>
         <button type="button" onClick={onSave} disabled={pending} style={primaryBtn}>
           {pending ? "Saving…" : "Save promotion"}
         </button>
@@ -400,7 +416,10 @@ export function PromotionsClient(props: Props) {
                   />
                 ) : null}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "#666" }}>{windowLabel(row, now)}</div>
+                  <div style={{ fontSize: 13, color: "#666" }}>
+                    {windowLabel(row, now)}
+                    {row.send_every_match ? " · Every match" : " · Once per chat"}
+                  </div>
                   <div style={{ fontWeight: 600 }}>{row.keywords}</div>
                   {row.body ? <div style={{ fontSize: 14 }}>{row.body}</div> : null}
                   <div style={{ display: "flex", gap: 12, marginTop: 6 }}>

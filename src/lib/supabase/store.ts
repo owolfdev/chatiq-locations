@@ -1306,10 +1306,12 @@ export type PromotionRow = {
   image_prompt: string | null;
   starts_at: string;
   ends_at: string;
+  /** Off: once per conversation. On: every keyword match sends the offer again. */
+  send_every_match: boolean;
 };
 
 const PROMOTION_COLUMNS =
-  "id, team_id, place_id, keywords, body, image_path, image_url, image_prompt, starts_at, ends_at";
+  "id, team_id, place_id, keywords, body, image_path, image_url, image_prompt, starts_at, ends_at, send_every_match";
 
 function asPromotion(row: Record<string, unknown>): PromotionRow {
   return {
@@ -1323,6 +1325,7 @@ function asPromotion(row: Record<string, unknown>): PromotionRow {
     image_prompt: typeof row.image_prompt === "string" ? row.image_prompt : null,
     starts_at: String(row.starts_at),
     ends_at: String(row.ends_at),
+    send_every_match: row.send_every_match === true,
   };
 }
 
@@ -1371,6 +1374,7 @@ export async function savePromotion(input: {
   image_prompt?: string | null;
   starts_at: string;
   ends_at: string;
+  send_every_match?: boolean;
 }): Promise<PromotionRow> {
   const keywords = input.keywords.trim();
   if (!keywords) {
@@ -1407,6 +1411,7 @@ export async function savePromotion(input: {
     image_prompt: input.image_prompt?.trim() || null,
     starts_at: starts.toISOString(),
     ends_at: ends.toISOString(),
+    send_every_match: input.send_every_match === true,
     updated_at: new Date().toISOString(),
   };
   const id = input.id?.trim() || null;
@@ -1459,7 +1464,12 @@ export async function matchPromotions(input: {
   place_id: string;
   item_query: string;
 }): Promise<
-  Array<{ id: string; body: string | null; image_url: string | null }>
+  Array<{
+    id: string;
+    body: string | null;
+    image_url: string | null;
+    send_every_match: boolean;
+  }>
 > {
   const query = input.item_query.trim();
   if (!query) return [];
@@ -1467,7 +1477,7 @@ export async function matchPromotions(input: {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from(LOCATIONS_TABLES.promotions)
-    .select("id, keywords, body, image_url")
+    .select("id, keywords, body, image_url, send_every_match")
     .eq("place_id", input.place_id)
     .lte("starts_at", now)
     .gt("ends_at", now);
@@ -1478,6 +1488,7 @@ export async function matchPromotions(input: {
     id: string;
     body: string | null;
     image_url: string | null;
+    send_every_match: boolean;
   }> = [];
   for (const row of data || []) {
     const keywords = typeof row.keywords === "string" ? row.keywords : "";
@@ -1491,7 +1502,12 @@ export async function matchPromotions(input: {
         ? row.image_url.trim()
         : null;
     if (!body && !imageUrl) continue;
-    matches.push({ id: String(row.id), body, image_url: imageUrl });
+    matches.push({
+      id: String(row.id),
+      body,
+      image_url: imageUrl,
+      send_every_match: row.send_every_match === true,
+    });
   }
   return matches;
 }
@@ -1516,6 +1532,7 @@ export async function resolveItem(input: {
     id: string;
     body: string | null;
     image_url: string | null;
+    send_every_match: boolean;
   }>;
 }> {
   const query = input.item_query.trim();

@@ -96,6 +96,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-20 — Promotion can repeat for a demo
+
+**What changed:** Each promotion has a switch, off by default. Off sends the offer once per conversation, including when a follow-up repeats the keyword. On sends it again on every match so a demo can reuse the same chat.
+
+**Next:** Save the pasta-sauce offer with the switch on, ask twice, then turn it off and confirm the next ask in that chat does not repeat it.
+
+```text
+chatiq-locations: [###################_] ~97% -> Phone-smoke one promotion
+chatiq: a matching promotion is attached once per conversation, unless that offer is set to send every match
+```
+
 ### 2026-11-20 — Store page and promotions
 
 **What changed:** The map page is the map. Store details moved to their own page. Promotions are a third page for the open branch: match words, offer text, a picture (generated from a prompt or uploaded), a duration, and a store logo for that branch. A current promotion whose words match the shopper's search is delivered with the aisle answer — text, picture, or both. Each promotion is sent once per conversation.

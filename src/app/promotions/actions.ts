@@ -69,6 +69,7 @@ export async function savePlacePromotion(input: {
   image_prompt?: string | null;
   starts_at: string;
   ends_at: string;
+  send_every_match?: boolean;
 }): Promise<
   | { ok: true; promotion: PromotionRow; promotions: PromotionRow[] }
   | { ok: false; error: string }
