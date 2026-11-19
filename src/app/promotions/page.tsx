@@ -1,5 +1,5 @@
 import { loadPlacePage } from "@/lib/auth/load-place-page";
-import { listPromotionsForPlace } from "@/lib/supabase/store";
+import { getPlaceLogo, listPromotionsForPlace } from "@/lib/supabase/store";
 
 import { PromotionsClient } from "./promotions-client";
 
@@ -32,9 +32,11 @@ export default async function PromotionsPage({ searchParams }: Props) {
   }
 
   let promotions: Awaited<ReturnType<typeof listPromotionsForPlace>> = [];
+  let logoUrl: string | null = null;
   let loadError: string | null = null;
   try {
     promotions = await listPromotionsForPlace(loaded.place.id);
+    logoUrl = (await getPlaceLogo(loaded.place.id)).image_url;
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load promotions";
   }
@@ -53,6 +55,7 @@ export default async function PromotionsPage({ searchParams }: Props) {
       <PromotionsClient
         placeId={loaded.place.id}
         placeName={loaded.place.name}
+        initialLogoUrl={logoUrl}
         initialPromotions={promotions}
       />
     </main>

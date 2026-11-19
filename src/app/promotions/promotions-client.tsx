@@ -6,8 +6,10 @@ import { PlaceNav } from "@/components/place-nav";
 import type { PromotionRow } from "@/lib/supabase/store";
 
 import {
+  clearPlaceLogoImage,
   generatePlacePromotionImage,
   removePlacePromotion,
+  savePlaceLogoImage,
   savePlacePromotion,
   uploadPlacePromotionImage,
 } from "./actions";
@@ -15,6 +17,7 @@ import {
 type Props = {
   placeId: string;
   placeName: string;
+  initialLogoUrl: string | null;
   initialPromotions: PromotionRow[];
 };
 
@@ -88,6 +91,7 @@ function windowLabel(row: PromotionRow, now: number): string {
 
 export function PromotionsClient(props: Props) {
   const [promotions, setPromotions] = useState(props.initialPromotions);
+  const [logoUrl, setLogoUrl] = useState(props.initialLogoUrl);
   const [draft, setDraft] = useState<Draft>(blankDraft);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +172,41 @@ export function PromotionsClient(props: Props) {
     reader.readAsDataURL(file);
   }
 
+  function onLogo(file: File | null) {
+    if (!file) return;
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      startTransition(async () => {
+        const res = await savePlaceLogoImage({
+          place_id: props.placeId,
+          data_url: dataUrl,
+        });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        setLogoUrl(res.logo.image_url);
+        setStatus("Store logo saved");
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function onClearLogo() {
+    setError(null);
+    startTransition(async () => {
+      const res = await clearPlaceLogoImage({ place_id: props.placeId });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setLogoUrl(null);
+      setStatus("Store logo removed");
+    });
+  }
+
   function onDelete(id: string) {
     setError(null);
     startTransition(async () => {
@@ -196,6 +235,40 @@ export function PromotionsClient(props: Props) {
           <a href="/api/auth/logout">Sign out</a>
         </p>
       </header>
+
+      <section style={card}>
+        <label style={label}>Store logo</label>
+        <p style={{ ...hint, marginTop: 0 }}>
+          The branding image for this branch. It stays with every promotion.
+        </p>
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt={`${props.placeName} logo`}
+            style={{ width: 96, height: 96, objectFit: "contain", marginTop: 8 }}
+          />
+        ) : null}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          <label style={{ ...secondaryBtn, display: "inline-block" }}>
+            {logoUrl ? "Replace logo" : "Add logo"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-label="Store logo"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                onLogo(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {logoUrl ? (
+            <button type="button" onClick={onClearLogo} disabled={pending} style={secondaryBtn}>
+              Remove
+            </button>
+          ) : null}
+        </div>
+      </section>
 
       <section style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>

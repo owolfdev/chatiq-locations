@@ -189,6 +189,85 @@ export async function updatePlace(input: {
   return data as PlaceRow;
 }
 
+export type PlaceLogo = {
+  image_url: string | null;
+  image_path: string | null;
+};
+
+function readPlaceLogo(metadata: unknown): PlaceLogo {
+  const record =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const imageUrl = typeof record.logo_url === "string" ? record.logo_url.trim() : "";
+  const imagePath = typeof record.logo_path === "string" ? record.logo_path.trim() : "";
+  return {
+    image_url: imageUrl || null,
+    image_path: imagePath || null,
+  };
+}
+
+export async function getPlaceLogo(place_id: string): Promise<PlaceLogo> {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.places)
+    .select("metadata")
+    .eq("id", place_id)
+    .maybeSingle();
+  if (error) {
+    throw new LocationsStoreError(error.message, "PLACE_GET_FAILED");
+  }
+  if (!data) {
+    throw new LocationsStoreError("Place not found", "PLACE_NOT_FOUND");
+  }
+  return readPlaceLogo(data.metadata);
+}
+
+/** Store logo for promotion branding. Empty values clear it. Other metadata is kept. */
+export async function setPlaceLogo(input: {
+  place_id: string;
+  image_url?: string | null;
+  image_path?: string | null;
+}): Promise<PlaceLogo> {
+  const supabase = client();
+  const { data: existing, error: readError } = await supabase
+    .from(LOCATIONS_TABLES.places)
+    .select("metadata")
+    .eq("id", input.place_id)
+    .maybeSingle();
+  if (readError) {
+    throw new LocationsStoreError(readError.message, "PLACE_GET_FAILED");
+  }
+  if (!existing) {
+    throw new LocationsStoreError("Place not found", "PLACE_NOT_FOUND");
+  }
+  const metadata =
+    existing.metadata &&
+    typeof existing.metadata === "object" &&
+    !Array.isArray(existing.metadata)
+      ? { ...(existing.metadata as Record<string, unknown>) }
+      : {};
+  const previous = readPlaceLogo(metadata);
+  const imageUrl = input.image_url?.trim() || null;
+  const imagePath = input.image_path?.trim() || null;
+  if (imageUrl) metadata.logo_url = imageUrl;
+  else delete metadata.logo_url;
+  if (imagePath) metadata.logo_path = imagePath;
+  else delete metadata.logo_path;
+
+  const { error } = await supabase
+    .from(LOCATIONS_TABLES.places)
+    .update({ metadata, updated_at: new Date().toISOString() })
+    .eq("id", input.place_id);
+  if (error) {
+    throw new LocationsStoreError(error.message, "PLACE_UPDATE_FAILED");
+  }
+  if (previous.image_path && previous.image_path !== imagePath) {
+    await supabase.storage.from(LOCATIONS_PROMOTIONS_BUCKET).remove([previous.image_path]);
+  }
+  return { image_url: imageUrl, image_path: imagePath };
+}
+
 /** All active places for a team (operator control plane). */
 export async function listPlacesForTeam(input: {
   team_id: string;

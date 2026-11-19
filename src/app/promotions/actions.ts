@@ -10,6 +10,8 @@ import {
   getPlace,
   listPromotionsForPlace,
   savePromotion,
+  setPlaceLogo,
+  type PlaceLogo,
   type PromotionRow,
 } from "@/lib/supabase/store";
 
@@ -125,6 +127,54 @@ export async function generatePlacePromotionImage(input: {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Image generation failed",
+    };
+  }
+}
+
+export async function savePlaceLogoImage(input: {
+  place_id: string;
+  data_url: string;
+}): Promise<{ ok: true; logo: PlaceLogo } | { ok: false; error: string }> {
+  try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
+    const decoded = decodeDataUrl(input.data_url);
+    if (!decoded) return { ok: false, error: "Use a JPEG, PNG, or WebP image" };
+    const stored = await storePromotionImage({
+      placeId: input.place_id,
+      bytes: decoded.bytes,
+      mime: decoded.mime,
+    });
+    const logo = await setPlaceLogo({
+      place_id: input.place_id,
+      image_url: stored.imageUrl,
+      image_path: stored.imagePath,
+    });
+    return { ok: true, logo };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save the logo",
+    };
+  }
+}
+
+export async function clearPlaceLogoImage(input: {
+  place_id: string;
+}): Promise<{ ok: true; logo: PlaceLogo } | { ok: false; error: string }> {
+  try {
+    const denied = await guardPlace(input.place_id);
+    if (denied) return { ok: false, error: denied };
+    const logo = await setPlaceLogo({
+      place_id: input.place_id,
+      image_url: null,
+      image_path: null,
+    });
+    return { ok: true, logo };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not remove the logo",
     };
   }
 }
