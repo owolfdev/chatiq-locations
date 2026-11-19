@@ -66,11 +66,6 @@ export default async function MapPage({ searchParams }: Props) {
         <MapperClient
           placeId={place.id}
           placeName={place.name}
-          placeAddress={place.address}
-          placePhone={place.phone}
-          placeWebsite={place.website}
-          placeContact={place.contact}
-          placeNotes={place.notes}
           initialZones={zones}
           layoutVersionId={layout_version_id}
           places={places.map((row) => ({ id: row.id, name: row.name }))}

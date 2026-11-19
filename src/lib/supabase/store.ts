@@ -1,5 +1,5 @@
 import { createLocationsAdminClient } from "./admin";
-import { LOCATIONS_TABLES } from "./tables";
+import { LOCATIONS_PROMOTIONS_BUCKET, LOCATIONS_TABLES } from "./tables";
 
 export class LocationsStoreError extends Error {
   constructor(
@@ -1216,6 +1216,207 @@ function zoneLabelMatchesQuery(zoneHay: string, query: string): boolean {
   return false;
 }
 
+export type PromotionRow = {
+  id: string;
+  team_id: string;
+  place_id: string;
+  keywords: string;
+  body: string | null;
+  image_path: string | null;
+  image_url: string | null;
+  image_prompt: string | null;
+  starts_at: string;
+  ends_at: string;
+};
+
+const PROMOTION_COLUMNS =
+  "id, team_id, place_id, keywords, body, image_path, image_url, image_prompt, starts_at, ends_at";
+
+function asPromotion(row: Record<string, unknown>): PromotionRow {
+  return {
+    id: String(row.id),
+    team_id: String(row.team_id),
+    place_id: String(row.place_id),
+    keywords: typeof row.keywords === "string" ? row.keywords : "",
+    body: typeof row.body === "string" ? row.body : null,
+    image_path: typeof row.image_path === "string" ? row.image_path : null,
+    image_url: typeof row.image_url === "string" ? row.image_url : null,
+    image_prompt: typeof row.image_prompt === "string" ? row.image_prompt : null,
+    starts_at: String(row.starts_at),
+    ends_at: String(row.ends_at),
+  };
+}
+
+export function splitPromotionKeywords(raw: string): string[] {
+  return raw
+    .split(/[\n,]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/** Every word of the phrase must appear in the shopper's search. */
+function keywordPhraseMatchesQuery(phrase: string, query: string): boolean {
+  const phraseTokens = queryTokens(phrase);
+  const queryForms = new Set(
+    queryTokens(query).flatMap((token) => wordForms(token))
+  );
+  if (phraseTokens.length === 0 || queryForms.size === 0) return false;
+  return phraseTokens.every((token) =>
+    wordForms(token).some((form) => queryForms.has(form))
+  );
+}
+
+export async function listPromotionsForPlace(
+  place_id: string
+): Promise<PromotionRow[]> {
+  const supabase = client();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.promotions)
+    .select(PROMOTION_COLUMNS)
+    .eq("place_id", place_id)
+    .order("starts_at", { ascending: false });
+  if (error) {
+    throw new LocationsStoreError(error.message, "PROMOTIONS_LIST_FAILED");
+  }
+  return (data || []).map((row) => asPromotion(row as Record<string, unknown>));
+}
+
+export async function savePromotion(input: {
+  place_id: string;
+  team_id: string;
+  id?: string | null;
+  keywords: string;
+  body?: string | null;
+  image_path?: string | null;
+  image_url?: string | null;
+  image_prompt?: string | null;
+  starts_at: string;
+  ends_at: string;
+}): Promise<PromotionRow> {
+  const keywords = input.keywords.trim();
+  if (!keywords) {
+    throw new LocationsStoreError("Enter match words", "INVALID_REQUEST");
+  }
+  const body = input.body?.trim() || null;
+  const imageUrl = input.image_url?.trim() || null;
+  if (!body && !imageUrl) {
+    throw new LocationsStoreError(
+      "Add offer text or a picture",
+      "INVALID_REQUEST"
+    );
+  }
+  const starts = new Date(input.starts_at);
+  const ends = new Date(input.ends_at);
+  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
+    throw new LocationsStoreError("Enter a start and an end", "INVALID_REQUEST");
+  }
+  if (ends.getTime() <= starts.getTime()) {
+    throw new LocationsStoreError(
+      "The promotion must end after it starts",
+      "INVALID_REQUEST"
+    );
+  }
+
+  const supabase = client();
+  const row = {
+    team_id: input.team_id,
+    place_id: input.place_id,
+    keywords,
+    body,
+    image_path: input.image_path?.trim() || null,
+    image_url: imageUrl,
+    image_prompt: input.image_prompt?.trim() || null,
+    starts_at: starts.toISOString(),
+    ends_at: ends.toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const id = input.id?.trim() || null;
+  const query = id
+    ? supabase
+        .from(LOCATIONS_TABLES.promotions)
+        .update(row)
+        .eq("id", id)
+        .eq("place_id", input.place_id)
+    : supabase.from(LOCATIONS_TABLES.promotions).insert(row);
+  const { data, error } = await query.select(PROMOTION_COLUMNS).single();
+  if (error || !data) {
+    throw new LocationsStoreError(
+      error?.message || "Failed to save promotion",
+      "PROMOTION_SAVE_FAILED"
+    );
+  }
+  return asPromotion(data as Record<string, unknown>);
+}
+
+export async function deletePromotion(input: {
+  place_id: string;
+  id: string;
+}): Promise<void> {
+  const supabase = client();
+  const { data: existing } = await supabase
+    .from(LOCATIONS_TABLES.promotions)
+    .select("image_path")
+    .eq("id", input.id)
+    .eq("place_id", input.place_id)
+    .maybeSingle();
+  const { error } = await supabase
+    .from(LOCATIONS_TABLES.promotions)
+    .delete()
+    .eq("id", input.id)
+    .eq("place_id", input.place_id);
+  if (error) {
+    throw new LocationsStoreError(error.message, "PROMOTION_DELETE_FAILED");
+  }
+  const path =
+    existing && typeof existing.image_path === "string"
+      ? existing.image_path
+      : null;
+  if (path) {
+    await supabase.storage.from(LOCATIONS_PROMOTIONS_BUCKET).remove([path]);
+  }
+}
+
+export async function matchPromotions(input: {
+  place_id: string;
+  item_query: string;
+}): Promise<
+  Array<{ id: string; body: string | null; image_url: string | null }>
+> {
+  const query = input.item_query.trim();
+  if (!query) return [];
+  const supabase = client();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from(LOCATIONS_TABLES.promotions)
+    .select("id, keywords, body, image_url")
+    .eq("place_id", input.place_id)
+    .lte("starts_at", now)
+    .gt("ends_at", now);
+  if (error) {
+    throw new LocationsStoreError(error.message, "PROMOTIONS_MATCH_FAILED");
+  }
+  const matches: Array<{
+    id: string;
+    body: string | null;
+    image_url: string | null;
+  }> = [];
+  for (const row of data || []) {
+    const keywords = typeof row.keywords === "string" ? row.keywords : "";
+    const hit = splitPromotionKeywords(keywords).some((phrase) =>
+      keywordPhraseMatchesQuery(phrase, query)
+    );
+    if (!hit) continue;
+    const body = typeof row.body === "string" && row.body.trim() ? row.body.trim() : null;
+    const imageUrl =
+      typeof row.image_url === "string" && row.image_url.trim()
+        ? row.image_url.trim()
+        : null;
+    if (!body && !imageUrl) continue;
+    matches.push({ id: String(row.id), body, image_url: imageUrl });
+  }
+  return matches;
+}
+
 export async function resolveItem(input: {
   place_id: string;
   item_query: string;
@@ -1232,10 +1433,15 @@ export async function resolveItem(input: {
   }>;
   /** True only when a search hit the safety ceiling and some matches were left out. */
   truncated: boolean;
+  promotions: Array<{
+    id: string;
+    body: string | null;
+    image_url: string | null;
+  }>;
 }> {
   const query = input.item_query.trim();
   if (!query) {
-    return { matches: [], truncated: false };
+    return { matches: [], truncated: false, promotions: [] };
   }
 
   const supabase = client();
@@ -1427,7 +1633,11 @@ export async function resolveItem(input: {
   }
 
   matches.sort((a, b) => matchRank(a.zone_type) - matchRank(b.zone_type));
-  return { matches, truncated };
+  const promotions = await matchPromotions({
+    place_id: input.place_id,
+    item_query: query,
+  });
+  return { matches, truncated, promotions };
 }
 
 export async function getPlaceMap(place_id: string): Promise<{

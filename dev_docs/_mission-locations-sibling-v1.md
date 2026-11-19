@@ -96,6 +96,17 @@ ChatIQ’s core mission is multilingual chat, channels, and bot runtime. Locatio
 
 ## 4) Progress Log
 
+### 2026-11-20 — Store page and promotions
+
+**What changed:** The map page is the map. Store details moved to their own page. Promotions are a third page for the open branch: match words, offer text, a picture (generated from a prompt or uploaded), and a duration. A current promotion whose words match the shopper's search is delivered with the aisle answer — text, picture, or both. Each promotion is sent once per conversation.
+
+**Next:** On the phone, open Promotions, save a running offer, ask the bot, then ask again and confirm the offer is not repeated.
+
+```text
+chatiq-locations: [###################_] ~97% -> Phone-smoke one promotion
+chatiq: a matching promotion is attached once per conversation
+```
+
 ### 2026-11-19 — Store contact details
 
 **What changed:** The mapper has a This store section: name, address, phone, website, contact, and notes. These sit on the place, separate from aisle notes. A shopper who asks for the address or phone is answered from those fields.

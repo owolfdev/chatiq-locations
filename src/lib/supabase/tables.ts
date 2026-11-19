@@ -12,9 +12,11 @@ export const LOCATIONS_TABLES = {
   captureSets: "_locations_capture_sets",
   captureAssets: "_locations_capture_assets",
   extractJobs: "_locations_extract_jobs",
+  promotions: "_locations_promotions",
 } as const;
 
 export const LOCATIONS_CAPTURE_BUCKET = "locations-capture";
+export const LOCATIONS_PROMOTIONS_BUCKET = "locations-promotions";
 export const MAX_ASSETS_PER_CAPTURE_SET = 24;
 export const CAPTURE_SUCCESS_RETAIN_DAYS = 7;
 export const CAPTURE_FAILED_RETAIN_DAYS = 14;
